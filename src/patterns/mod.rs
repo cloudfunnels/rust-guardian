@@ -58,10 +58,22 @@ enum AstPatternType {
     EmptyFunctionBody,
     /// Look for unwrap() or expect() calls without meaningful error messages
     UnwrapOrExpectWithoutMessage,
-    /// Look for direct substrate access (semantic pattern)
-    DirectSubstrateAccess(regex::Regex),
     /// Look for domain modules importing infrastructure (semantic pattern)
     DomainImportsInfrastructure(regex::Regex),
+    /// Advanced semantic patterns
+    CyclomaticComplexity(u32),
+    PublicWithoutDocs,
+    FunctionLinesGt(u32),
+    NestingDepthGt(u32),
+    FunctionArgsGt(u32),
+    BlockingCallInAsync,
+    FutureNotAwaited,
+    SelectWithoutBiased,
+    GenericWithoutBounds,
+    TestFnWithoutAssertion,
+    ImplWithoutTrait,
+    UnsafeBlock,
+    IgnoredTestAttribute,
 }
 
 /// A match found by a pattern
@@ -150,6 +162,10 @@ impl PatternEngine {
             Ok(AstPatternType::EmptyFunctionBody)
         } else if pattern == "unwrap_or_expect_without_message" {
             Ok(AstPatternType::UnwrapOrExpectWithoutMessage)
+        } else if pattern == "unsafe_block" {
+            Ok(AstPatternType::UnsafeBlock)
+        } else if pattern == "ignored_test_attribute" {
+            Ok(AstPatternType::IgnoredTestAttribute)
         } else {
             Err(GuardianError::pattern(format!("Unknown AST pattern type in rule '{}': {}", rule_id, pattern)))
         }
@@ -157,16 +173,66 @@ impl PatternEngine {
     
     /// Parse semantic pattern string into typed pattern
     fn parse_semantic_pattern(&self, pattern: &str, rule_id: &str) -> GuardianResult<AstPatternType> {
-        // Build regex for semantic patterns
-        let regex = regex::Regex::new(pattern)
-            .map_err(|e| GuardianError::pattern(format!("Invalid semantic pattern regex in rule '{}': {}", rule_id, e)))?;
-            
-        if pattern.contains("substrate") && !pattern.contains("traits") {
-            Ok(AstPatternType::DirectSubstrateAccess(regex))
-        } else if pattern.contains("infrastructure") {
-            Ok(AstPatternType::DomainImportsInfrastructure(regex))
-        } else {
-            Err(GuardianError::pattern(format!("Unknown semantic pattern type in rule '{}': {}", rule_id, pattern)))
+        // Handle parametric patterns first
+        if let Some(param) = pattern.strip_prefix("cyclomatic_complexity_gt:") {
+            let threshold = param.parse::<u32>()
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+            return Ok(AstPatternType::CyclomaticComplexity(threshold));
+        }
+        
+        if let Some(param) = pattern.strip_prefix("function_lines_gt:") {
+            let threshold = param.parse::<u32>()
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+            return Ok(AstPatternType::FunctionLinesGt(threshold));
+        }
+        
+        if let Some(param) = pattern.strip_prefix("nesting_depth_gt:") {
+            let threshold = param.parse::<u32>()
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+            return Ok(AstPatternType::NestingDepthGt(threshold));
+        }
+        
+        if let Some(param) = pattern.strip_prefix("function_args_gt:") {
+            let threshold = param.parse::<u32>()
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+            return Ok(AstPatternType::FunctionArgsGt(threshold));
+        }
+        
+        // Handle non-parametric semantic patterns
+        match pattern {
+            "public_without_docs" => Ok(AstPatternType::PublicWithoutDocs),
+            "blocking_call_in_async" => Ok(AstPatternType::BlockingCallInAsync),
+            "future_not_awaited" => Ok(AstPatternType::FutureNotAwaited),
+            "select_without_biased" => Ok(AstPatternType::SelectWithoutBiased),
+            "generic_without_bounds" => Ok(AstPatternType::GenericWithoutBounds),
+            "test_fn_without_assertion" => Ok(AstPatternType::TestFnWithoutAssertion),
+            "impl_without_trait" => Ok(AstPatternType::ImplWithoutTrait),
+            _ => {
+                // For unrecognized semantic patterns, check if they look like import patterns
+                // This allows users to define custom domain-specific import checking
+                if pattern.starts_with("use") || pattern.starts_with("import:") || pattern.contains("_access") {
+                    // Handle patterns like "use.*substrate" or "use.*infrastructure"
+                    let import_pattern = if pattern.starts_with("use") {
+                        pattern.to_string()
+                    } else if pattern.starts_with("import:") {
+                        pattern.replace("import:", "")
+                    } else {
+                        // Handle patterns like "direct_X_access"
+                        format!(r"use\s+.*{}", 
+                            pattern.replace("direct_", "")
+                                  .replace("_access", ""))
+                    };
+                    
+                    if let Ok(regex) = regex::Regex::new(&import_pattern) {
+                        Ok(AstPatternType::DomainImportsInfrastructure(regex))
+                    } else {
+                        Err(GuardianError::pattern(format!("Invalid import pattern in rule '{}': {}", rule_id, pattern)))
+                    }
+                } else {
+                    // Unknown pattern - could be a future extension
+                    Err(GuardianError::pattern(format!("Unknown semantic pattern type in rule '{}': {}", rule_id, pattern)))
+                }
+            }
         }
     }
     
@@ -260,10 +326,30 @@ impl PatternEngine {
                     });
                 }
             }
-            AstPatternType::DirectSubstrateAccess(regex) => {
-                let found_matches = self.find_import_pattern_matches(&syntax_tree, content, regex);
-                for (line, col, import_text, context) in found_matches {
-                    // Check exclude conditions
+            AstPatternType::CyclomaticComplexity(threshold) => {
+                let found_matches = self.find_cyclomatic_complexity(&syntax_tree, *threshold);
+                for (line, col, fn_name, complexity, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    let message = pattern.message_template.replace("{value}", &complexity.to_string());
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!("fn {}", fn_name),
+                        message,
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::PublicWithoutDocs => {
+                let found_matches = self.find_public_without_docs(&syntax_tree);
+                for (line, col, item_name, context) in found_matches {
                     if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
                         continue;
                     }
@@ -273,7 +359,222 @@ impl PatternEngine {
                         file_path: file_path.to_path_buf(),
                         line_number: Some(line),
                         column_number: Some(col),
-                        matched_text: import_text,
+                        matched_text: item_name,
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::FunctionLinesGt(threshold) => {
+                let found_matches = self.find_long_functions(&syntax_tree, content, *threshold);
+                for (line, col, fn_name, line_count, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    let message = pattern.message_template.replace("{lines}", &line_count.to_string());
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!("fn {}", fn_name),
+                        message,
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::NestingDepthGt(threshold) => {
+                let found_matches = self.find_deep_nesting(&syntax_tree, *threshold);
+                for (line, col, depth, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    let message = pattern.message_template.replace("{depth}", &depth.to_string());
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: "nested block".to_string(),
+                        message,
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::FunctionArgsGt(threshold) => {
+                let found_matches = self.find_functions_with_many_args(&syntax_tree, *threshold);
+                for (line, col, fn_name, arg_count, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    let message = pattern.message_template.replace("{count}", &arg_count.to_string());
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!("fn {}", fn_name),
+                        message,
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::BlockingCallInAsync => {
+                let found_matches = self.find_blocking_in_async(&syntax_tree);
+                for (line, col, call_name, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: call_name,
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::FutureNotAwaited => {
+                let found_matches = self.find_futures_not_awaited(&syntax_tree);
+                for (line, col, expr, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: expr,
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::SelectWithoutBiased => {
+                let found_matches = self.find_select_without_biased(&syntax_tree);
+                for (line, col, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: "tokio::select!".to_string(),
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::GenericWithoutBounds => {
+                let found_matches = self.find_generics_without_bounds(&syntax_tree);
+                for (line, col, generic_name, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: generic_name,
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::TestFnWithoutAssertion => {
+                let found_matches = self.find_test_functions_without_assertions(&syntax_tree);
+                for (line, col, fn_name, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!("fn {}", fn_name),
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::ImplWithoutTrait => {
+                let found_matches = self.find_impl_without_trait(&syntax_tree);
+                for (line, col, impl_name, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!("impl {}", impl_name),
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::UnsafeBlock => {
+                let found_matches = self.find_unsafe_blocks(&syntax_tree);
+                for (line, col, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: "unsafe".to_string(),
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::IgnoredTestAttribute => {
+                let found_matches = self.find_ignored_tests(&syntax_tree);
+                for (line, col, fn_name, context) in found_matches {
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!("#[ignore] fn {}", fn_name),
                         message: pattern.message_template.clone(),
                         severity: pattern.severity,
                         context: Some(context),
@@ -727,6 +1028,678 @@ impl PatternEngine {
             .and_then(|name| name.to_str())
             .map(|name| name.contains("test") || name.starts_with("test_"))
             .unwrap_or(false)
+    }
+    
+    /// Find functions with high cyclomatic complexity
+    fn find_cyclomatic_complexity(&self, syntax_tree: &syn::File, threshold: u32) -> Vec<(u32, u32, String, u32, String)> {
+        use syn::visit::Visit;
+        
+        struct ComplexityVisitor {
+            threshold: u32,
+            matches: Vec<(u32, u32, String, u32, String)>,
+        }
+        
+        impl Visit<'_> for ComplexityVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                let fn_name = func.sig.ident.to_string();
+                let complexity = self.calculate_complexity(&func.block);
+                
+                if complexity > self.threshold {
+                    let (line, col, context) = (1, 1, format!("fn {} (complexity: {})", fn_name, complexity));
+                    self.matches.push((line, col, fn_name, complexity, context));
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+        }
+        
+        impl ComplexityVisitor {
+            fn calculate_complexity(&self, block: &syn::Block) -> u32 {
+                use syn::visit::Visit;
+                
+                struct ComplexityCalculator {
+                    complexity: u32,
+                }
+                
+                impl Visit<'_> for ComplexityCalculator {
+                    fn visit_expr_if(&mut self, expr: &syn::ExprIf) {
+                        self.complexity += 1;
+                        syn::visit::visit_expr_if(self, expr);
+                    }
+                    
+                    fn visit_expr_while(&mut self, expr: &syn::ExprWhile) {
+                        self.complexity += 1;
+                        syn::visit::visit_expr_while(self, expr);
+                    }
+                    
+                    fn visit_expr_for_loop(&mut self, expr: &syn::ExprForLoop) {
+                        self.complexity += 1;
+                        syn::visit::visit_expr_for_loop(self, expr);
+                    }
+                    
+                    fn visit_expr_loop(&mut self, expr: &syn::ExprLoop) {
+                        self.complexity += 1;
+                        syn::visit::visit_expr_loop(self, expr);
+                    }
+                    
+                    fn visit_expr_match(&mut self, expr_match: &syn::ExprMatch) {
+                        self.complexity += expr_match.arms.len() as u32;
+                        syn::visit::visit_expr_match(self, expr_match);
+                    }
+                    
+                    fn visit_expr_method_call(&mut self, method_call: &syn::ExprMethodCall) {
+                        // Check for ? operator (error propagation)
+                        if let syn::Expr::Try(_) = &*method_call.receiver {
+                            self.complexity += 1;
+                        }
+                        syn::visit::visit_expr_method_call(self, method_call);
+                    }
+                }
+                
+                let mut calculator = ComplexityCalculator { complexity: 1 }; // Base complexity
+                calculator.visit_block(block);
+                calculator.complexity
+            }
+        }
+        
+        let mut visitor = ComplexityVisitor {
+            threshold,
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find public items without documentation
+    fn find_public_without_docs(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct PublicDocsVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for PublicDocsVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                if matches!(func.vis, syn::Visibility::Public(_)) {
+                    if !self.has_doc_comment(&func.attrs) {
+                        let fn_name = func.sig.ident.to_string();
+                        let (line, col, context) = (1, 1, format!("pub fn {}", fn_name));
+                        self.matches.push((line, col, format!("fn {}", fn_name), context));
+                    }
+                }
+                syn::visit::visit_item_fn(self, func);
+            }
+            
+            fn visit_item_struct(&mut self, item_struct: &syn::ItemStruct) {
+                if matches!(item_struct.vis, syn::Visibility::Public(_)) {
+                    if !self.has_doc_comment(&item_struct.attrs) {
+                        let struct_name = item_struct.ident.to_string();
+                        let (line, col, context) = (1, 1, format!("pub struct {}", struct_name));
+                        self.matches.push((line, col, format!("struct {}", struct_name), context));
+                    }
+                }
+                syn::visit::visit_item_struct(self, item_struct);
+            }
+            
+            fn visit_item_enum(&mut self, item_enum: &syn::ItemEnum) {
+                if matches!(item_enum.vis, syn::Visibility::Public(_)) {
+                    if !self.has_doc_comment(&item_enum.attrs) {
+                        let enum_name = item_enum.ident.to_string();
+                        let (line, col, context) = (1, 1, format!("pub enum {}", enum_name));
+                        self.matches.push((line, col, format!("enum {}", enum_name), context));
+                    }
+                }
+                syn::visit::visit_item_enum(self, item_enum);
+            }
+            
+            fn visit_item_trait(&mut self, item_trait: &syn::ItemTrait) {
+                if matches!(item_trait.vis, syn::Visibility::Public(_)) {
+                    if !self.has_doc_comment(&item_trait.attrs) {
+                        let trait_name = item_trait.ident.to_string();
+                        let (line, col, context) = (1, 1, format!("pub trait {}", trait_name));
+                        self.matches.push((line, col, format!("trait {}", trait_name), context));
+                    }
+                }
+                syn::visit::visit_item_trait(self, item_trait);
+            }
+        }
+        
+        impl PublicDocsVisitor {
+            fn has_doc_comment(&self, attrs: &[syn::Attribute]) -> bool {
+                attrs.iter().any(|attr| {
+                    attr.path().is_ident("doc") || 
+                    (attr.path().segments.len() == 1 && 
+                     attr.path().segments.first().unwrap().ident == "doc")
+                })
+            }
+        }
+        
+        let mut visitor = PublicDocsVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find functions that are too long
+    fn find_long_functions(&self, syntax_tree: &syn::File, content: &str, threshold: u32) -> Vec<(u32, u32, String, u32, String)> {
+        use syn::visit::Visit;
+        
+        struct LongFunctionVisitor<'a> {
+            content: &'a str,
+            threshold: u32,
+            matches: Vec<(u32, u32, String, u32, String)>,
+        }
+        
+        impl<'a> Visit<'_> for LongFunctionVisitor<'a> {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                let fn_name = func.sig.ident.to_string();
+                
+                // Calculate function line count
+                let line_count = self.count_function_lines(&func.block);
+                
+                if line_count > self.threshold {
+                    let (line, col, context) = (1, 1, format!("fn {} ({} lines)", fn_name, line_count));
+                    self.matches.push((line, col, fn_name, line_count, context));
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+        }
+        
+        impl<'a> LongFunctionVisitor<'a> {
+            fn count_function_lines(&self, block: &syn::Block) -> u32 {
+                // Simple line counting - count non-empty, non-comment lines
+                let block_str = format!("{}", quote::quote!(#block));
+                block_str.lines()
+                    .filter(|line| !line.trim().is_empty() && !line.trim().starts_with("//"))
+                    .count() as u32
+            }
+        }
+        
+        let mut visitor = LongFunctionVisitor {
+            content,
+            threshold,
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find code with deep nesting
+    fn find_deep_nesting(&self, syntax_tree: &syn::File, threshold: u32) -> Vec<(u32, u32, u32, String)> {
+        use syn::visit::Visit;
+        
+        struct NestingVisitor {
+            threshold: u32,
+            current_depth: u32,
+            matches: Vec<(u32, u32, u32, String)>,
+        }
+        
+        impl Visit<'_> for NestingVisitor {
+            fn visit_block(&mut self, block: &syn::Block) {
+                self.current_depth += 1;
+                
+                if self.current_depth > self.threshold {
+                    let (line, col, context) = (1, 1, format!("nested block at depth {}", self.current_depth));
+                    self.matches.push((line, col, self.current_depth, context));
+                }
+                
+                syn::visit::visit_block(self, block);
+                self.current_depth -= 1;
+            }
+            
+            fn visit_expr_if(&mut self, expr_if: &syn::ExprIf) {
+                self.current_depth += 1;
+                
+                if self.current_depth > self.threshold {
+                    let (line, col, context) = (1, 1, format!("if statement at depth {}", self.current_depth));
+                    self.matches.push((line, col, self.current_depth, context));
+                }
+                
+                syn::visit::visit_expr_if(self, expr_if);
+                self.current_depth -= 1;
+            }
+            
+            fn visit_expr_match(&mut self, expr_match: &syn::ExprMatch) {
+                self.current_depth += 1;
+                
+                if self.current_depth > self.threshold {
+                    let (line, col, context) = (1, 1, format!("match statement at depth {}", self.current_depth));
+                    self.matches.push((line, col, self.current_depth, context));
+                }
+                
+                syn::visit::visit_expr_match(self, expr_match);
+                self.current_depth -= 1;
+            }
+        }
+        
+        let mut visitor = NestingVisitor {
+            threshold,
+            current_depth: 0,
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find functions with too many arguments
+    fn find_functions_with_many_args(&self, syntax_tree: &syn::File, threshold: u32) -> Vec<(u32, u32, String, u32, String)> {
+        use syn::visit::Visit;
+        
+        struct ManyArgsVisitor {
+            threshold: u32,
+            matches: Vec<(u32, u32, String, u32, String)>,
+        }
+        
+        impl Visit<'_> for ManyArgsVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                let fn_name = func.sig.ident.to_string();
+                let arg_count = func.sig.inputs.len() as u32;
+                
+                if arg_count > self.threshold {
+                    let (line, col, context) = (1, 1, format!("fn {} ({} args)", fn_name, arg_count));
+                    self.matches.push((line, col, fn_name, arg_count, context));
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+        }
+        
+        let mut visitor = ManyArgsVisitor {
+            threshold,
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find blocking calls in async functions
+    fn find_blocking_in_async(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct BlockingInAsyncVisitor {
+            in_async_fn: bool,
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for BlockingInAsyncVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                let was_async = self.in_async_fn;
+                self.in_async_fn = func.sig.asyncness.is_some();
+                
+                syn::visit::visit_item_fn(self, func);
+                self.in_async_fn = was_async;
+            }
+            
+            fn visit_expr_method_call(&mut self, method_call: &syn::ExprMethodCall) {
+                if self.in_async_fn {
+                    let method_name = method_call.method.to_string();
+                    
+                    // Common blocking operations
+                    if ["read_to_string", "write_all", "flush", "recv", "send", "lock", "read", "write"].contains(&method_name.as_str()) {
+                        // Check if it's not awaited
+                        let (line, col, context) = (1, 1, format!(".{}()", method_name));
+                        self.matches.push((line, col, method_name, context));
+                    }
+                }
+                
+                syn::visit::visit_expr_method_call(self, method_call);
+            }
+            
+            fn visit_expr_call(&mut self, call: &syn::ExprCall) {
+                if self.in_async_fn {
+                    if let syn::Expr::Path(path) = &*call.func {
+                        if let Some(segment) = path.path.segments.last() {
+                            let fn_name = segment.ident.to_string();
+                            
+                            // Common blocking functions
+                            if ["thread::sleep", "std::thread::sleep", "sleep"].contains(&fn_name.as_str()) {
+                                let (line, col, context) = (1, 1, format!("{}()", fn_name));
+                                self.matches.push((line, col, fn_name, context));
+                            }
+                        }
+                    }
+                }
+                
+                syn::visit::visit_expr_call(self, call);
+            }
+        }
+        
+        let mut visitor = BlockingInAsyncVisitor {
+            in_async_fn: false,
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find futures that are not awaited
+    fn find_futures_not_awaited(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct FutureNotAwaitedVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for FutureNotAwaitedVisitor {
+            fn visit_expr_call(&mut self, call: &syn::ExprCall) {
+                // Look for function calls that return futures but aren't awaited
+                if let syn::Expr::Path(path) = &*call.func {
+                    if let Some(segment) = path.path.segments.last() {
+                        let fn_name = segment.ident.to_string();
+                        
+                        // Common async functions that return futures
+                        if fn_name.ends_with("_async") || 
+                           ["spawn", "spawn_blocking", "timeout", "sleep"].contains(&fn_name.as_str()) {
+                            let (line, col, context) = (1, 1, format!("{}() not awaited", fn_name));
+                            self.matches.push((line, col, format!("{}()", fn_name), context));
+                        }
+                    }
+                }
+                
+                syn::visit::visit_expr_call(self, call);
+            }
+        }
+        
+        let mut visitor = FutureNotAwaitedVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find tokio::select! without biased
+    fn find_select_without_biased(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String)> {
+        use syn::visit::Visit;
+        
+        struct SelectVisitor {
+            matches: Vec<(u32, u32, String)>,
+        }
+        
+        impl Visit<'_> for SelectVisitor {
+            fn visit_macro(&mut self, mac: &syn::Macro) {
+                if let Some(ident) = mac.path.get_ident() {
+                    if ident == "select" {
+                        // Check if it's tokio::select!
+                        let macro_str = format!("{}", quote::quote!(#mac));
+                        if macro_str.contains("select!") && !macro_str.contains("biased") {
+                            let (line, col, context) = (1, 1, "tokio::select! without biased".to_string());
+                            self.matches.push((line, col, context));
+                        }
+                    }
+                }
+                syn::visit::visit_macro(self, mac);
+            }
+        }
+        
+        let mut visitor = SelectVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find direct mindset module access
+    fn find_direct_mindset_access(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct MindsetAccessVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for MindsetAccessVisitor {
+            fn visit_item_use(&mut self, use_item: &syn::ItemUse) {
+                let use_string = format!("{}", quote::quote!(#use_item));
+                
+                if use_string.contains("mindset") && !use_string.contains("domain") {
+                    let (line, col, context) = (1, 1, use_string.clone());
+                    self.matches.push((line, col, use_string, context));
+                }
+                
+                syn::visit::visit_item_use(self, use_item);
+            }
+        }
+        
+        let mut visitor = MindsetAccessVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find generics without trait bounds
+    fn find_generics_without_bounds(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct GenericBoundsVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for GenericBoundsVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                for param in &func.sig.generics.params {
+                    if let syn::GenericParam::Type(type_param) = param {
+                        if type_param.bounds.is_empty() {
+                            let generic_name = type_param.ident.to_string();
+                            let (line, col, context) = (1, 1, format!("<{}>", generic_name));
+                            self.matches.push((line, col, generic_name, context));
+                        }
+                    }
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+            
+            fn visit_item_struct(&mut self, item_struct: &syn::ItemStruct) {
+                for param in &item_struct.generics.params {
+                    if let syn::GenericParam::Type(type_param) = param {
+                        if type_param.bounds.is_empty() {
+                            let generic_name = type_param.ident.to_string();
+                            let (line, col, context) = (1, 1, format!("struct {}<{}>", item_struct.ident, generic_name));
+                            self.matches.push((line, col, generic_name, context));
+                        }
+                    }
+                }
+                
+                syn::visit::visit_item_struct(self, item_struct);
+            }
+        }
+        
+        let mut visitor = GenericBoundsVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find test functions without assertions
+    fn find_test_functions_without_assertions(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct TestAssertionVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for TestAssertionVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                // Check if function has #[test] attribute
+                let is_test = func.attrs.iter().any(|attr| {
+                    attr.path().is_ident("test")
+                });
+                
+                if is_test {
+                    let fn_name = func.sig.ident.to_string();
+                    
+                    // Check if function body contains assertions
+                    if !self.has_assertions(&func.block) {
+                        let (line, col, context) = (1, 1, format!("#[test] fn {}", fn_name));
+                        self.matches.push((line, col, fn_name, context));
+                    }
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+        }
+        
+        impl TestAssertionVisitor {
+            fn has_assertions(&self, block: &syn::Block) -> bool {
+                use syn::visit::Visit;
+                
+                struct AssertionFinder {
+                    found: bool,
+                }
+                
+                impl Visit<'_> for AssertionFinder {
+                    fn visit_expr_macro(&mut self, expr_macro: &syn::ExprMacro) {
+                        if let Some(ident) = expr_macro.mac.path.get_ident() {
+                            let macro_name = ident.to_string();
+                            if macro_name.starts_with("assert") {
+                                self.found = true;
+                            }
+                        }
+                        syn::visit::visit_expr_macro(self, expr_macro);
+                    }
+                    
+                    fn visit_expr_call(&mut self, call: &syn::ExprCall) {
+                        if let syn::Expr::Path(path) = &*call.func {
+                            if let Some(segment) = path.path.segments.last() {
+                                let fn_name = segment.ident.to_string();
+                                if fn_name.starts_with("assert") || fn_name == "panic" {
+                                    self.found = true;
+                                }
+                            }
+                        }
+                        syn::visit::visit_expr_call(self, call);
+                    }
+                }
+                
+                let mut finder = AssertionFinder { found: false };
+                finder.visit_block(block);
+                finder.found
+            }
+        }
+        
+        let mut visitor = TestAssertionVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find impl blocks without traits
+    fn find_impl_without_trait(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct ImplTraitVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for ImplTraitVisitor {
+            fn visit_item_impl(&mut self, impl_item: &syn::ItemImpl) {
+                // Check if this is an inherent impl (no trait)
+                if impl_item.trait_.is_none() {
+                    let type_name = match &*impl_item.self_ty {
+                        syn::Type::Path(type_path) => {
+                            type_path.path.segments.last()
+                                .map(|s| s.ident.to_string())
+                                .unwrap_or_else(|| "Unknown".to_string())
+                        }
+                        _ => "Unknown".to_string()
+                    };
+                    
+                    let (line, col, context) = (1, 1, format!("impl {}", type_name));
+                    self.matches.push((line, col, type_name, context));
+                }
+                
+                syn::visit::visit_item_impl(self, impl_item);
+            }
+        }
+        
+        let mut visitor = ImplTraitVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find unsafe blocks
+    fn find_unsafe_blocks(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String)> {
+        use syn::visit::Visit;
+        
+        struct UnsafeVisitor {
+            matches: Vec<(u32, u32, String)>,
+        }
+        
+        impl Visit<'_> for UnsafeVisitor {
+            fn visit_expr_unsafe(&mut self, expr: &syn::ExprUnsafe) {
+                let (line, col, context) = (1, 1, "unsafe block".to_string());
+                self.matches.push((line, col, context));
+                
+                syn::visit::visit_expr_unsafe(self, expr);
+            }
+            
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                if func.sig.unsafety.is_some() {
+                    let fn_name = func.sig.ident.to_string();
+                    let (line, col, context) = (1, 1, format!("unsafe fn {}", fn_name));
+                    self.matches.push((line, col, context));
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+        }
+        
+        let mut visitor = UnsafeVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find ignored test functions
+    fn find_ignored_tests(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct IgnoredTestVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for IgnoredTestVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                // Check if function has both #[test] and #[ignore] attributes
+                let is_test = func.attrs.iter().any(|attr| attr.path().is_ident("test"));
+                let is_ignored = func.attrs.iter().any(|attr| attr.path().is_ident("ignore"));
+                
+                if is_test && is_ignored {
+                    let fn_name = func.sig.ident.to_string();
+                    let (line, col, context) = (1, 1, format!("#[ignore] #[test] fn {}", fn_name));
+                    self.matches.push((line, col, fn_name, context));
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+        }
+        
+        let mut visitor = IgnoredTestVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
     }
     
     /// Convert pattern matches to violations
