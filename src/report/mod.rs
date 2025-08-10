@@ -22,6 +22,8 @@ pub enum OutputFormat {
     Sarif,
     /// GitHub Actions format for workflow integration
     GitHub,
+    /// Agent-friendly format for easy parsing: [line:path] <violation>
+    Agent,
 }
 
 use std::str::FromStr;
@@ -37,6 +39,7 @@ impl FromStr for OutputFormat {
             "junit" => Ok(Self::Junit),
             "sarif" => Ok(Self::Sarif),
             "github" => Ok(Self::GitHub),
+            "agent" => Ok(Self::Agent),
             _ => Err(format!("Unknown output format: {s}")),
         }
     }
@@ -102,6 +105,7 @@ impl ReportFormatter {
             OutputFormat::Junit => self.format_junit(report, &filtered_violations),
             OutputFormat::Sarif => self.format_sarif(report, &filtered_violations),
             OutputFormat::GitHub => self.format_github(report, &filtered_violations),
+            OutputFormat::Agent => self.format_agent(report, &filtered_violations),
         }
     }
 
@@ -443,6 +447,29 @@ impl ReportFormatter {
                 violation.file_path.display(),
                 violation.rule_id,
                 position_part,
+                violation.message
+            ));
+        }
+
+        Ok(output)
+    }
+
+    /// Format report for agent consumption: [line:path] <violation>
+    fn format_agent(
+        &self,
+        _report: &ValidationReport,
+        violations: &[&Violation],
+    ) -> GuardianResult<String> {
+        let mut output = String::new();
+
+        for violation in violations {
+            let line_number = violation.line_number.unwrap_or(1);
+            let path = violation.file_path.display();
+            
+            output.push_str(&format!(
+                "[{}:{}]\n{}\n\n",
+                line_number,
+                path,
                 violation.message
             ));
         }

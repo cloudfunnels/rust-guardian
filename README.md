@@ -37,29 +37,56 @@ cargo add rust-guardian
 # Check entire project
 rust-guardian check
 
-# Check specific path
-rust-guardian check src/
+# Check specific paths
+rust-guardian check src/ lib.rs
 
-# Output JSON for CI/CD
-rust-guardian check --format json --severity error
+# Output formats
+rust-guardian check --format json              # JSON for tooling
+rust-guardian check --format agent             # Agent-friendly: [line:path] violation
+rust-guardian check --format junit             # JUnit XML for CI/CD  
+rust-guardian check --format sarif             # SARIF for security tools
+rust-guardian check --format github            # GitHub Actions format
 
-# Watch for changes during development  
-rust-guardian watch
+# Filter by severity
+rust-guardian check --severity error           # Only errors
+rust-guardian check --severity warning         # Warnings and errors
+rust-guardian check --severity info            # All violations
 
-# Validate configuration
-rust-guardian validate-config guardian.yaml
+# Performance and caching
+rust-guardian check --cache                    # Enable caching
+rust-guardian check --cache-file /tmp/cache    # Custom cache location
+rust-guardian check --no-parallel              # Disable parallel processing
+rust-guardian check --max-violations 50        # Limit output
 
-# Use custom .guardianignore file
-rust-guardian check --guardianignore .custom-ignore
+# File filtering
+rust-guardian check --exclude "**/*.tmp"       # Additional exclude patterns
+rust-guardian check --exclude "legacy/" --exclude "vendor/"
+rust-guardian check --guardianignore .custom   # Custom ignore file
+rust-guardian check --no-ignore                # Ignore all .guardianignore files
 
-# Ignore all .guardianignore files
-rust-guardian check --no-ignore
+# Configuration and debugging
+rust-guardian check -c custom.yaml             # Custom config file
+rust-guardian check --verbose                  # Enable debug logging
+rust-guardian check --no-color                 # Disable colors
+rust-guardian check --fail-fast                # Stop on first error
 
-# Add temporary exclusions
-rust-guardian check --exclude "**/*.tmp" --exclude "staging/"
+# Watch mode for development
+rust-guardian watch src/                       # Watch directory for changes
+rust-guardian watch --debounce 500             # Custom debounce ms
 
-# Explain a specific rule
-rust-guardian explain todo_comments
+# Configuration management
+rust-guardian validate-config                  # Validate guardian.yaml
+rust-guardian validate-config custom.yaml     # Validate custom config
+
+# Rule management
+rust-guardian rules                            # List all rules
+rust-guardian rules --enabled-only            # Only show enabled rules
+rust-guardian rules --category placeholders   # Filter by category
+rust-guardian explain todo_comments           # Explain specific rule
+
+# Cache management
+rust-guardian cache stats                     # Show cache statistics
+rust-guardian cache clear                     # Clear cache
 ```
 
 ### Library Usage
@@ -345,13 +372,26 @@ Colored terminal output with context:
 ```
 ❌ Code Quality Violations Found
 
-src/api/handlers.rs:45:12
-  → todo_comments: Placeholder comment detected: TODO
-  │ 
-45│     // TODO: Implement error handling
-  │            ^^^^
+📁 src/api/handlers.rs
+  45:12:todo_comments [error] Placeholder comment detected: TODO
+    │ // TODO: Implement error handling
 
 📊 Summary: 1 error, 2 warnings in 156 files (1.2s)
+```
+
+### Agent Format
+Simplified format for automated processing and agent consumption:
+
+```
+[45:src/api/handlers.rs]
+Placeholder comment detected: TODO
+
+[102:src/lib.rs]  
+Traditional tests violate CDD - consciousness architecture should be self-validating
+
+[67:src/models.rs]
+Function returns Ok(()) with no meaningful implementation
+
 ```
 
 ### JSON

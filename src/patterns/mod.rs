@@ -104,8 +104,12 @@ impl PatternEngine {
         rule: &PatternRule,
         effective_severity: Severity,
     ) -> GuardianResult<()> {
+        tracing::debug!("Adding rule '{}' of type {:?} with pattern '{}' and severity {:?}", 
+                       rule.id, rule.rule_type, rule.pattern, effective_severity);
+        
         match rule.rule_type {
             RuleType::Regex => {
+                tracing::debug!("Compiling regex pattern '{}' for rule '{}'", rule.pattern, rule.id);
                 let regex = if rule.case_sensitive {
                     Regex::new(&rule.pattern)
                 } else {
@@ -261,9 +265,14 @@ impl PatternEngine {
         let file_path = file_path.as_ref();
         let mut matches = Vec::new();
 
+        tracing::debug!("Analyzing file '{}' with {} regex patterns and {} AST patterns", 
+                       file_path.display(), self.regex_patterns.len(), self.ast_patterns.len());
+
         // Apply regex patterns
         for pattern in self.regex_patterns.values() {
+            tracing::debug!("Processing regex pattern '{}'", pattern.rule_id);
             let pattern_matches = self.apply_regex_pattern(pattern, file_path, content)?;
+            tracing::debug!("Pattern '{}' found {} matches", pattern.rule_id, pattern_matches.len());
             matches.extend(pattern_matches);
         }
 
@@ -285,10 +294,15 @@ impl PatternEngine {
         file_path: &Path,
         content: &str,
     ) -> GuardianResult<Vec<PatternMatch>> {
+        tracing::debug!("Applying regex pattern '{}' to file '{}'", pattern.rule_id, file_path.display());
+        tracing::debug!("Pattern regex: '{}'", pattern.regex.as_str());
+        tracing::debug!("Content length: {} characters", content.len());
+        
         let mut matches = Vec::new();
 
         // Find all matches in the content
         for regex_match in pattern.regex.find_iter(content) {
+            tracing::debug!("Found regex match: '{}' at offset {}", regex_match.as_str(), regex_match.start());
             let matched_text = regex_match.as_str().to_string();
             let (line_num, col_num, context) =
                 self.get_match_location(content, regex_match.start());
@@ -301,6 +315,7 @@ impl PatternEngine {
                 content,
                 regex_match.start(),
             ) {
+                tracing::debug!("Match '{}' excluded by conditions", matched_text);
                 continue;
             }
 
@@ -1014,13 +1029,16 @@ impl PatternEngine {
         &self,
         conditions: Option<&ExcludeConditions>,
         file_path: &Path,
-        _matched_text: &str,
+        matched_text: &str,
         _content: &str,
         _offset: usize,
     ) -> bool {
         if let Some(conditions) = conditions {
+            tracing::debug!("Checking exclude conditions for match '{}' in file '{}'", matched_text, file_path.display());
+            
             // Check if in test files
             if conditions.in_tests && self.is_test_file(file_path) {
+                tracing::debug!("Match excluded: in_tests=true and file is test file");
                 return true;
             }
 
@@ -1029,6 +1047,7 @@ impl PatternEngine {
                 for pattern in patterns {
                     if let Ok(glob_pattern) = glob::Pattern::new(pattern) {
                         if glob_pattern.matches_path(file_path) {
+                            tracing::debug!("Match excluded: file matches pattern '{}'", pattern);
                             return true;
                         }
                     }
@@ -1036,6 +1055,9 @@ impl PatternEngine {
             }
 
             // Additional condition checks can be added here when AST context is available
+            tracing::debug!("Match not excluded by any conditions");
+        } else {
+            tracing::debug!("No exclude conditions to check");
         }
 
         false
@@ -1841,5 +1863,60 @@ mod tests {
             .analyze_file(Path::new("tests/unit.rs"), content)
             .unwrap();
         assert_eq!(matches.len(), 0);
+    }
+
+    #[test]
+    fn test_custom_test_pattern_matching() {
+        let mut engine = PatternEngine::new();
+        
+        // Create the test pattern rule as it appears in config
+        let test_pattern_rule = PatternRule {
+            id: "no_traditional_tests".to_string(),
+            rule_type: crate::config::RuleType::Regex,
+            pattern: r"(^\s*mod\s+tests?\s*\{|#\[test\]|#\[cfg\(test\)\])".to_string(),
+            message: "Traditional tests violate CDD principles - use integration tests instead: {match}".to_string(),
+            severity: Some(crate::domain::violations::Severity::Error),
+            enabled: true,
+            case_sensitive: true,
+            exclude_if: Some(crate::config::ExcludeConditions {
+                attribute: None,
+                in_tests: false,
+                file_patterns: Some(vec![
+                    "**/integration_tests/**".to_string(),
+                    "**/tests/**".to_string()
+                ]),
+            }),
+        };
+
+        engine.add_rule(&test_pattern_rule, crate::domain::violations::Severity::Error).unwrap();
+
+        let test_content = r#"//! Test file
+pub fn some_function() -> String {
+    "Hello, World!".to_string()
+}
+
+#[test]
+fn test_some_function() {
+    assert_eq!(some_function(), "Hello, World!");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn another_test() {
+        assert_eq!(some_function().len(), 13);
+    }
+}"#;
+
+        let matches = engine.analyze_file(Path::new("test_file.rs"), test_content).unwrap();
+        println!("Found {} matches in test content", matches.len());
+        for (i, m) in matches.iter().enumerate() {
+            println!("Match {}: {} at {}:{}", i, m.matched_text, m.line_number.unwrap_or(0), m.column_number.unwrap_or(0));
+        }
+        
+        // Should find at least the #[test] and #[cfg(test)] patterns
+        assert!(!matches.is_empty(), "Should find test patterns in content");
     }
 }

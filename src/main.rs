@@ -161,6 +161,7 @@ enum OutputFormatArg {
     Junit,
     Sarif,
     Github,
+    Agent,
 }
 
 impl From<OutputFormatArg> for OutputFormat {
@@ -171,6 +172,7 @@ impl From<OutputFormatArg> for OutputFormat {
             OutputFormatArg::Junit => OutputFormat::Junit,
             OutputFormatArg::Sarif => OutputFormat::Sarif,
             OutputFormatArg::Github => OutputFormat::GitHub,
+            OutputFormatArg::Agent => OutputFormat::Agent,
         }
     }
 }
@@ -280,9 +282,9 @@ async fn run_check(
     } else {
         // Try to find default config file
         let default_configs = [
-            "rust_guardian.yaml",
-            "rust_guardian.yml",
-            ".rust_guardian.yaml",
+            "guardian.yaml",
+            "guardian.yml",
+            ".guardian.yaml",
         ];
         let mut config = None;
 
@@ -526,10 +528,10 @@ fn is_config_change(event: &notify::Event) -> Option<PathBuf> {
         // Check for common config file names
         if matches!(
             file_name,
-            "rust_guardian.yaml"
-                | "rust_guardian.yml"
-                | ".rust_guardian.yaml"
-                | ".rust_guardian.yml"
+            "guardian.yaml"
+                | "guardian.yml"
+                | ".guardian.yaml"
+                | ".guardian.yml"
         ) {
             return Some(path.clone());
         }
@@ -564,9 +566,9 @@ async fn run_watch_analysis_with_config(
     } else {
         // Try to find default config file
         let default_configs = [
-            "rust_guardian.yaml",
-            "rust_guardian.yml",
-            ".rust_guardian.yaml",
+            "guardian.yaml",
+            "guardian.yml",
+            ".guardian.yaml",
         ];
         let mut config = None;
 
@@ -665,7 +667,7 @@ async fn run_watch_analysis_with_config(
 }
 
 fn run_validate_config(config_path: Option<PathBuf>) -> GuardianResult<i32> {
-    let config_path = config_path.unwrap_or_else(|| PathBuf::from("rust_guardian.yaml"));
+    let config_path = config_path.unwrap_or_else(|| PathBuf::from("guardian.yaml"));
 
     println!("Validating configuration: {}", config_path.display());
 
@@ -815,7 +817,22 @@ fn run_list_rules(
     let config = if let Some(path) = config_path {
         GuardianConfig::load_from_file(path)?
     } else {
-        GuardianConfig::default()
+        // Try to find default config file
+        let default_configs = [
+            "guardian.yaml",
+            "guardian.yml", 
+            ".guardian.yaml",
+        ];
+        let mut config = None;
+
+        for config_name in &default_configs {
+            if Path::new(config_name).exists() {
+                config = Some(GuardianConfig::load_from_file(config_name)?);
+                break;
+            }
+        }
+
+        config.unwrap_or_else(GuardianConfig::default)
     };
 
     println!("📋 Available Rules\n");

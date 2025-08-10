@@ -116,6 +116,22 @@ patterns:
         message: "Magic number found: {match} - consider using a named constant"
         enabled: false
 
+# Test pattern violations for CDD compliance
+test_patterns:
+  severity: error
+  enabled: true
+  rules:
+    - id: no_traditional_tests
+      type: regex
+      pattern: '(mod\s+tests?\s*\{|#\[test\]|#\[cfg\(test\)\])'
+      message: "Traditional tests violate CDD principles - use integration tests instead: {match}"
+      severity: error
+      case_sensitive: true
+      exclude_if:
+        file_patterns:
+          - "**/integration_tests/**"
+          - "**/tests/**"
+
 # Reporting configuration for CI
 reporting:
   show_context_lines: 2
