@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "config_fingerprint": "6b8edab3c93adcb8",
+  "files": {
+    "/tmp/test_sample.rs": {
+      "content_hash": "e788800777bfaf4cea095632cd66708e7558d42708a4e26337f46d11688b39c9",
+      "size": 521,
+      "modified_at": 1754798592,
+      "violation_count": 5,
+      "analyzed_at": 1754798610,
+      "config_fingerprint": "6b8edab3c93adcb8"
+    }
+  },
+  "metadata": {
+    "created_at": 1754798610,
+    "updated_at": 1754798610,
+    "hits": 0,
+    "misses": 1
+  }
+}
