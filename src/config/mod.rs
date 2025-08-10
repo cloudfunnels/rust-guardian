@@ -118,14 +118,14 @@ impl GuardianConfig {
     /// Load configuration from string content
     pub fn load_from_str(content: &str) -> GuardianResult<Self> {
         let config: Self = serde_yaml::from_str(content)
-            .map_err(|e| GuardianError::config(format!("Failed to parse config: {}", e)))?;
+            .map_err(|e| GuardianError::config(format!("Failed to parse config: {e}")))?;
 
         config.validate()?;
         Ok(config)
     }
 
     /// Get default configuration with built-in patterns
-    pub fn default() -> Self {
+    pub fn with_defaults() -> Self {
         Self {
             version: "1.0".to_string(),
             paths: PathConfig {
@@ -334,7 +334,7 @@ impl GuardianConfig {
     /// Convert to JSON for serialization
     pub fn to_json(&self) -> GuardianResult<String> {
         serde_json::to_string_pretty(self)
-            .map_err(|e| GuardianError::config(format!("Failed to serialize config: {}", e)))
+            .map_err(|e| GuardianError::config(format!("Failed to serialize config: {e}")))
     }
 
     /// Create a fingerprint of the configuration for cache validation
@@ -382,7 +382,7 @@ impl GuardianConfig {
 
 impl Default for GuardianConfig {
     fn default() -> Self {
-        Self::default()
+        Self::with_defaults()
     }
 }
 
@@ -448,8 +448,10 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        let mut config = GuardianConfig::default();
-        config.version = "999.0".to_string();
+        let config = GuardianConfig {
+            version: "999.0".to_string(),
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
     }
 

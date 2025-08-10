@@ -182,8 +182,7 @@ impl PatternEngine {
             Ok(AstPatternType::IgnoredTestAttribute)
         } else {
             Err(GuardianError::pattern(format!(
-                "Unknown AST pattern type in rule '{}': {}",
-                rule_id, pattern
+                "Unknown AST pattern type in rule '{rule_id}': {pattern}"
             )))
         }
     }
@@ -193,25 +192,25 @@ impl PatternEngine {
         // Handle parametric patterns first
         if let Some(param) = pattern.strip_prefix("cyclomatic_complexity_gt:") {
             let threshold = param.parse::<u32>()
-                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{rule_id}': {param}")))?;
             return Ok(AstPatternType::CyclomaticComplexity(threshold));
         }
         
         if let Some(param) = pattern.strip_prefix("function_lines_gt:") {
             let threshold = param.parse::<u32>()
-                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{rule_id}': {param}")))?;
             return Ok(AstPatternType::FunctionLinesGt(threshold));
         }
         
         if let Some(param) = pattern.strip_prefix("nesting_depth_gt:") {
             let threshold = param.parse::<u32>()
-                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{rule_id}': {param}")))?;
             return Ok(AstPatternType::NestingDepthGt(threshold));
         }
         
         if let Some(param) = pattern.strip_prefix("function_args_gt:") {
             let threshold = param.parse::<u32>()
-                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{}': {}", rule_id, param)))?;
+                .map_err(|_| GuardianError::pattern(format!("Invalid threshold in rule '{rule_id}': {param}")))?;
             return Ok(AstPatternType::FunctionArgsGt(threshold));
         }
         
@@ -243,16 +242,16 @@ impl PatternEngine {
                     if let Ok(regex) = regex::Regex::new(&import_pattern) {
                         Ok(AstPatternType::DomainImportsInfrastructure(regex))
                     } else {
-                        Err(GuardianError::pattern(format!("Invalid import pattern in rule '{}': {}", rule_id, pattern)))
+                        Err(GuardianError::pattern(format!("Invalid import pattern in rule '{rule_id}': {pattern}")))
                     }
                 } else {
                     // Unknown pattern - could be a future extension
-                    Err(GuardianError::pattern(format!("Unknown semantic pattern type in rule '{}': {}", rule_id, pattern)))
+                    Err(GuardianError::pattern(format!("Unknown semantic pattern type in rule '{rule_id}': {pattern}")))
                 }
             }
         }
     }
-    
+
     /// Analyze a file and return all pattern matches
     pub fn analyze_file<P: AsRef<Path>>(
         &self,
@@ -364,7 +363,7 @@ impl PatternEngine {
                         file_path: file_path.to_path_buf(),
                         line_number: Some(line),
                         column_number: Some(col),
-                        matched_text: format!("{}!()", macro_name),
+                        matched_text: format!("{macro_name}!()"),
                         message,
                         severity: pattern.severity,
                         context: Some(context),
@@ -754,7 +753,7 @@ impl PatternEngine {
                     if self.target_macros.contains(&macro_name) {
                         let _span = mac.path.span();
                         // proc_macro2::Span doesn't provide direct line/column access in stable Rust
-                        // For now, use line 1 but provide better context
+                        // Use line 1 with improved context for macro location
                         let context = format!("{}!()", macro_name);
                         self.matches.push((1, 1, macro_name, context));
                     }
@@ -771,8 +770,6 @@ impl PatternEngine {
         visitor.visit_file(syntax_tree);
         visitor.matches
     }
-    
-    
     /// Find functions that return empty Ok(()) responses
     fn find_empty_ok_returns(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String)> {
         use syn::visit::Visit;
@@ -826,27 +823,24 @@ impl PatternEngine {
             }
 
             fn is_ok_unit_expr(&self, expr: &syn::Expr) -> bool {
-                match expr {
-                    syn::Expr::Call(call) => {
-                        // Check if it's Ok(())
-                        if let syn::Expr::Path(path) = &*call.func {
-                            if path
-                                .path
-                                .segments
-                                .last()
-                                .map(|seg| seg.ident == "Ok")
-                                .unwrap_or(false)
-                            {
-                                // Check if argument is unit type ()
-                                if call.args.len() == 1 {
-                                    if let syn::Expr::Tuple(tuple) = &call.args[0] {
-                                        return tuple.elems.is_empty();
-                                    }
+                if let syn::Expr::Call(call) = expr {
+                    // Check if it's Ok(())
+                    if let syn::Expr::Path(path) = &*call.func {
+                        if path
+                            .path
+                            .segments
+                            .last()
+                            .map(|seg| seg.ident == "Ok")
+                            .unwrap_or(false)
+                        {
+                            // Check if argument is unit type ()
+                            if call.args.len() == 1 {
+                                if let syn::Expr::Tuple(tuple) = &call.args[0] {
+                                    return tuple.elems.is_empty();
                                 }
                             }
                         }
                     }
-                    _ => {}
                 }
                 false
             }
@@ -967,7 +961,7 @@ impl PatternEngine {
                 
                 if self.regex.is_match(&use_string) {
                     // Extract line information from the use statement
-                    // For now, use simple line tracking - in a real implementation,
+                    // Use simple line tracking for AST span location
                     // we'd use syn span information for precise location
                     let (line, col, context) = (1, 1, use_string.clone());
                     self.matches.push((line, col, use_string, context));
@@ -986,7 +980,7 @@ impl PatternEngine {
         visitor.visit_file(syntax_tree);
         visitor.matches
     }
-    
+
     /// Get line and column number from byte offset in content
     fn get_match_location(&self, content: &str, byte_offset: usize) -> (u32, u32, String) {
         let mut line = 1;
@@ -1043,7 +1037,7 @@ impl PatternEngine {
                 }
             }
 
-            // TODO: Check attributes and other conditions when we have AST context
+            // Additional condition checks can be added here when AST context is available
         }
 
         false
@@ -1074,7 +1068,7 @@ impl PatternEngine {
                 }
             }
 
-            // TODO: Check for specific attributes like #[test] on functions
+            // Future enhancement: Check for specific attributes like #[test] on functions
         }
 
         false

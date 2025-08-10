@@ -48,6 +48,14 @@ jobs:
       if: matrix.rust == 'stable'
       run: cargo clippy --all-targets --all-features -- -D warnings
     
+    - name: Run rust-guardian self-assessment
+      if: matrix.rust == 'stable'
+      run: |
+        # Build first to ensure rust-guardian binary is available
+        cargo build --release
+        # Run rust-guardian on its own source code
+        cargo run --release -- check src/ --config guardian.yaml --format github
+    
     - name: Build
       run: cargo build --verbose --all-features
     

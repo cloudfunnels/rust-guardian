@@ -82,10 +82,10 @@ impl FileCache {
     pub fn load(&mut self) -> GuardianResult<()> {
         if self.cache_path.exists() {
             let content = fs::read_to_string(&self.cache_path)
-                .map_err(|e| GuardianError::cache(format!("Failed to read cache file: {}", e)))?;
+                .map_err(|e| GuardianError::cache(format!("Failed to read cache file: {e}")))?;
 
             self.data = serde_json::from_str(&content)
-                .map_err(|e| GuardianError::cache(format!("Failed to parse cache file: {}", e)))?;
+                .map_err(|e| GuardianError::cache(format!("Failed to parse cache file: {e}")))?;
 
             // Migrate cache format if needed
             self.migrate_if_needed()?;
@@ -120,16 +120,16 @@ impl FileCache {
         // Ensure cache directory exists
         if let Some(parent) = self.cache_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
-                GuardianError::cache(format!("Failed to create cache directory: {}", e))
+                GuardianError::cache(format!("Failed to create cache directory: {e}"))
             })?;
         }
 
         // Serialize and write cache
         let content = serde_json::to_string_pretty(&self.data)
-            .map_err(|e| GuardianError::cache(format!("Failed to serialize cache: {}", e)))?;
+            .map_err(|e| GuardianError::cache(format!("Failed to serialize cache: {e}")))?;
 
         fs::write(&self.cache_path, content)
-            .map_err(|e| GuardianError::cache(format!("Failed to write cache file: {}", e)))?;
+            .map_err(|e| GuardianError::cache(format!("Failed to write cache file: {e}")))?;
 
         self.dirty = false;
         Ok(())
@@ -155,7 +155,7 @@ impl FileCache {
         let current_size = metadata.len();
         let current_modified = metadata
             .modified()
-            .map_err(|e| GuardianError::cache(format!("Failed to get modification time: {}", e)))?
+            .map_err(|e| GuardianError::cache(format!("Failed to get modification time: {e}")))?
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
@@ -207,7 +207,7 @@ impl FileCache {
 
         // Get current file metadata
         let metadata = fs::metadata(file_path)
-            .map_err(|e| GuardianError::cache(format!("Failed to get file metadata: {}", e)))?;
+            .map_err(|e| GuardianError::cache(format!("Failed to get file metadata: {e}")))?;
 
         let content_hash = self.calculate_file_hash(file_path)?;
 
@@ -216,9 +216,7 @@ impl FileCache {
             size: metadata.len(),
             modified_at: metadata
                 .modified()
-                .map_err(|e| {
-                    GuardianError::cache(format!("Failed to get modification time: {}", e))
-                })?
+                .map_err(|e| GuardianError::cache(format!("Failed to get modification time: {e}")))?
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -261,7 +259,7 @@ impl FileCache {
         // Remove cache file if it exists
         if self.cache_path.exists() {
             fs::remove_file(&self.cache_path)
-                .map_err(|e| GuardianError::cache(format!("Failed to remove cache file: {}", e)))?;
+                .map_err(|e| GuardianError::cache(format!("Failed to remove cache file: {e}")))?;
         }
 
         Ok(())
@@ -301,14 +299,14 @@ impl FileCache {
     /// Calculate SHA-256 hash of file content
     fn calculate_file_hash<P: AsRef<Path>>(&self, file_path: P) -> GuardianResult<String> {
         let mut file = File::open(&file_path)
-            .map_err(|e| GuardianError::cache(format!("Failed to open file for hashing: {}", e)))?;
+            .map_err(|e| GuardianError::cache(format!("Failed to open file for hashing: {e}")))?;
 
         let mut hasher = Sha256::new();
         let mut buffer = [0; 8192];
 
         loop {
             let bytes_read = file.read(&mut buffer).map_err(|e| {
-                GuardianError::cache(format!("Failed to read file for hashing: {}", e))
+                GuardianError::cache(format!("Failed to read file for hashing: {e}"))
             })?;
 
             if bytes_read == 0 {

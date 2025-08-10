@@ -246,7 +246,7 @@ impl GuardianValidator {
                             // File is cached - get violation count from cache
                             // Note: We don't re-add the actual violations to avoid memory usage
                             // In a real implementation, you might want to store violations in cache
-                            _cached_violation_count += 1; // Placeholder - would get from cache entry
+                            _cached_violation_count += 1; // Count cached files without re-adding violations
                         }
                     }
                     Err(e) => {

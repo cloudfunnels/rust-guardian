@@ -207,7 +207,7 @@ async fn main() {
             process::exit(exit_code);
         }
         Err(e) => {
-            eprintln!("Error: {}", e);
+            eprintln!("Error: {e}");
             process::exit(1);
         }
     }
@@ -259,6 +259,7 @@ async fn run_command(cli: Cli) -> GuardianResult<i32> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_check(
     config_path: Option<PathBuf>,
     paths: Vec<PathBuf>,
@@ -292,7 +293,7 @@ async fn run_check(
             }
         }
 
-        config.unwrap_or_else(|| GuardianConfig::default())
+        config.unwrap_or_else(GuardianConfig::default)
     };
 
     // Create validator
@@ -315,7 +316,7 @@ async fn run_check(
     // Set up validation options
     let validation_options = ValidationOptions {
         use_cache,
-        output_format: format.clone().into(),
+        output_format: format.into(),
         report_options: ReportOptions {
             use_colors,
             max_violations,
@@ -339,7 +340,7 @@ async fn run_check(
 
     // Format and output results
     let formatted = validator.format_report(&report, format.into())?;
-    println!("{}", formatted);
+    println!("{formatted}");
 
     // Print cache statistics if caching is enabled
     if use_cache {
@@ -387,7 +388,7 @@ async fn run_watch(
     };
 
     println!("🎯 Patterns: {}", watch_patterns.join(", "));
-    println!("⏱️  Debounce delay: {}ms", delay_ms);
+    println!("⏱️  Debounce delay: {delay_ms}ms");
     println!("Press Ctrl+C to stop watching\\n");
 
     // Create a channel for file system events
@@ -397,12 +398,12 @@ async fn run_watch(
     let mut watcher = notify::recommended_watcher(move |res: NotifyResult<Event>| match res {
         Ok(event) => {
             if let Err(e) = tx.send(event) {
-                eprintln!("Error sending event: {}", e);
+                eprintln!("Error sending event: {e}");
             }
         }
-        Err(e) => eprintln!("Watch error: {}", e),
+        Err(e) => eprintln!("Watch error: {e}"),
     })
-    .map_err(|e| GuardianError::config(format!("Failed to create file watcher: {}", e)))?;
+    .map_err(|e| GuardianError::config(format!("Failed to create file watcher: {e}")))?;
 
     // Start watching the path
     watcher
@@ -443,7 +444,7 @@ async fn run_watch(
                     )
                     .await
                     {
-                        eprintln!("❌ Config reload and analysis failed: {}", e);
+                        eprintln!("❌ Config reload and analysis failed: {e}");
                     }
                     last_run = std::time::Instant::now();
                 }
@@ -459,7 +460,7 @@ async fn run_watch(
                         if let Err(e) =
                             run_watch_analysis_with_config(&watch_path, &watch_patterns, None).await
                         {
-                            eprintln!("❌ Analysis failed: {}", e);
+                            eprintln!("❌ Analysis failed: {e}");
                         }
                         last_run = now;
                     }
@@ -577,14 +578,14 @@ async fn run_watch_analysis_with_config(
                         break;
                     }
                     Err(e) => {
-                        eprintln!("⚠️  Failed to load config from {}: {}", config_name, e);
+                        eprintln!("⚠️  Failed to load config from {config_name}: {e}");
                         continue;
                     }
                 }
             }
         }
 
-        config.unwrap_or_else(|| GuardianConfig::default())
+        config.unwrap_or_else(GuardianConfig::default)
     };
 
     // Create validator
@@ -615,7 +616,7 @@ async fn run_watch_analysis_with_config(
         Ok(report) => {
             if report.has_violations() {
                 let formatted = validator.format_report(&report, OutputFormat::Human)?;
-                println!("{}", formatted);
+                println!("{formatted}");
 
                 let error_count = report.summary.violations_by_severity.error;
                 let warning_count = report.summary.violations_by_severity.warning;
@@ -656,7 +657,7 @@ async fn run_watch_analysis_with_config(
             println!("⌚ Watching for changes... (Press Ctrl+C to stop)\\n");
         }
         Err(e) => {
-            eprintln!("❌ Analysis error: {}", e);
+            eprintln!("❌ Analysis error: {e}");
         }
     }
 
@@ -684,17 +685,14 @@ fn run_validate_config(config_path: Option<PathBuf>) -> GuardianResult<i32> {
                 .sum();
 
             println!("📊 Configuration summary:");
-            println!(
-                "  Categories: {} total, {} enabled",
-                total_categories, enabled_categories
-            );
-            println!("  Rules: {} total, {} enabled", total_rules, enabled_rules);
+            println!("  Categories: {total_categories} total, {enabled_categories} enabled");
+            println!("  Rules: {total_rules} total, {enabled_rules} enabled");
             println!("  Path patterns: {}", config.paths.patterns.len());
 
             Ok(0)
         }
         Err(e) => {
-            eprintln!("❌ Configuration validation failed: {}", e);
+            eprintln!("❌ Configuration validation failed: {e}");
             Ok(1)
         }
     }
@@ -708,7 +706,7 @@ fn run_explain(rule_id: String) -> GuardianResult<i32> {
         for rule in &category.rules {
             if rule.id == rule_id {
                 println!("📖 Rule: {}", rule.id);
-                println!("📂 Category: {}", category_name);
+                println!("📂 Category: {category_name}");
                 println!(
                     "⚠️ Severity: {:?}",
                     rule.severity.unwrap_or(category.severity)
@@ -726,7 +724,7 @@ fn run_explain(rule_id: String) -> GuardianResult<i32> {
                     println!();
                     println!("🚫 Exclusions:");
                     if let Some(attr) = &exclude.attribute {
-                        println!("   Attribute: {}", attr);
+                        println!("   Attribute: {attr}");
                     }
                     if exclude.in_tests {
                         println!("   Excluded in test files");
@@ -741,12 +739,12 @@ fn run_explain(rule_id: String) -> GuardianResult<i32> {
         }
     }
 
-    eprintln!("❌ Rule '{}' not found", rule_id);
+    eprintln!("❌ Rule '{rule_id}' not found");
     println!();
     println!("Available rules:");
 
     for (category_name, category) in &config.patterns {
-        println!("  {}:", category_name);
+        println!("  {category_name}:");
         for rule in &category.rules {
             println!("    - {}", rule.id);
         }
@@ -803,7 +801,7 @@ async fn run_cache_command(action: CacheCommands) -> GuardianResult<i32> {
             let removed = cache.cleanup()?;
             cache.save()?;
 
-            println!("✅ Cleaned up {} stale cache entries", removed);
+            println!("✅ Cleaned up {removed} stale cache entries");
             Ok(0)
         }
     }
@@ -885,7 +883,7 @@ fn format_timestamp(timestamp: u64) -> String {
     let dt = Utc
         .timestamp_opt(timestamp as i64, 0)
         .single()
-        .unwrap_or_else(|| Utc::now());
+        .unwrap_or_else(Utc::now);
 
     dt.format("%Y-%m-%d %H:%M:%S UTC").to_string()
 }

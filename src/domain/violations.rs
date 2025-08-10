@@ -108,8 +108,8 @@ impl Violation {
     /// Format violation for display
     pub fn format_display(&self) -> String {
         let location = match (self.line_number, self.column_number) {
-            (Some(line), Some(col)) => format!(":{}:{}", line, col),
-            (Some(line), None) => format!(":{}", line),
+            (Some(line), Some(col)) => format!(":{line}:{col}"),
+            (Some(line), None) => format!(":{line}"),
             _ => String::new(),
         };
 
