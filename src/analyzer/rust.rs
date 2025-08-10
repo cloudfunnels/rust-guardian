@@ -42,7 +42,6 @@ impl RustAnalyzer {
     fn find_unimplemented_macros(&self, syntax_tree: &syn::File, content: &str) -> Vec<Violation> {
         let mut visitor = UnimplementedMacroVisitor {
             violations: Vec::new(),
-            content,
             should_skip_tests: !self.analyze_tests && self.is_test_file_content(content),
         };
         
@@ -54,7 +53,6 @@ impl RustAnalyzer {
     fn find_empty_ok_returns(&self, syntax_tree: &syn::File, content: &str, file_path: &Path) -> Vec<Violation> {
         let mut visitor = EmptyOkReturnVisitor {
             violations: Vec::new(),
-            content,
             file_path: file_path.to_path_buf(),
             should_skip_tests: !self.analyze_tests && self.is_test_file_content(content),
         };
@@ -158,13 +156,12 @@ impl FileAnalyzer for RustAnalyzer {
 }
 
 /// Visitor for finding unimplemented macros
-struct UnimplementedMacroVisitor<'a> {
+struct UnimplementedMacroVisitor {
     violations: Vec<Violation>,
-    content: &'a str,
     should_skip_tests: bool,
 }
 
-impl<'a> Visit<'_> for UnimplementedMacroVisitor<'a> {
+impl Visit<'_> for UnimplementedMacroVisitor {
     fn visit_macro(&mut self, mac: &syn::Macro) {
         if let Some(ident) = mac.path.get_ident() {
             let macro_name = ident.to_string();
@@ -209,7 +206,7 @@ impl<'a> Visit<'_> for UnimplementedMacroVisitor<'a> {
     }
 }
 
-impl<'a> UnimplementedMacroVisitor<'a> {
+impl UnimplementedMacroVisitor {
     fn is_test_function(&self, func: &syn::ItemFn) -> bool {
         func.attrs.iter().any(|attr| {
             attr.path().is_ident("test") || 
@@ -219,14 +216,13 @@ impl<'a> UnimplementedMacroVisitor<'a> {
 }
 
 /// Visitor for finding functions that return Ok(()) with no real implementation
-struct EmptyOkReturnVisitor<'a> {
+struct EmptyOkReturnVisitor {
     violations: Vec<Violation>,
-    content: &'a str,
     file_path: std::path::PathBuf,
     should_skip_tests: bool,
 }
 
-impl<'a> Visit<'_> for EmptyOkReturnVisitor<'a> {
+impl Visit<'_> for EmptyOkReturnVisitor {
     fn visit_item_fn(&mut self, func: &syn::ItemFn) {
         // Skip test functions if we should skip tests
         if self.should_skip_tests && self.is_test_function(func) {
@@ -257,7 +253,7 @@ impl<'a> Visit<'_> for EmptyOkReturnVisitor<'a> {
     }
 }
 
-impl<'a> EmptyOkReturnVisitor<'a> {
+impl EmptyOkReturnVisitor {
     fn is_test_function(&self, func: &syn::ItemFn) -> bool {
         func.attrs.iter().any(|attr| {
             attr.path().is_ident("test") || 
@@ -391,18 +387,6 @@ impl ArchitecturalViolationVisitor {
         
         path_str.contains("tests/") ||
         path_str.contains("examples/")
-    }
-}
-
-/// Helper function to extract location information from proc_macro2 span
-fn get_location_from_span(content: &str, line: usize, column: usize) -> (u32, u32, String) {
-    let lines: Vec<&str> = content.lines().collect();
-    
-    if line > 0 && line <= lines.len() {
-        let context = lines[line - 1].trim().to_string();
-        (line as u32, column as u32, context)
-    } else {
-        (line as u32, column as u32, "".to_string())
     }
 }
 

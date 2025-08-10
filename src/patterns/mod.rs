@@ -205,7 +205,7 @@ impl PatternEngine {
         
         match &pattern.pattern_type {
             AstPatternType::MacroCall(macro_names) => {
-                let found_matches = self.find_macro_calls(&syntax_tree, macro_names, content);
+                let found_matches = self.find_macro_calls(&syntax_tree, macro_names);
                 for (line, col, macro_name, context) in found_matches {
                     // Check exclude conditions
                     if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
@@ -227,7 +227,7 @@ impl PatternEngine {
                 }
             }
             AstPatternType::EmptyOkReturn => {
-                let found_matches = self.find_empty_ok_returns(&syntax_tree, content);
+                let found_matches = self.find_empty_ok_returns(&syntax_tree);
                 for (line, col, context) in found_matches {
                     // Check exclude conditions
                     if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
@@ -266,12 +266,11 @@ impl PatternEngine {
     }
     
     /// Find macro calls in the syntax tree
-    fn find_macro_calls(&self, syntax_tree: &syn::File, target_macros: &[String], content: &str) -> Vec<(u32, u32, String, String)> {
+    fn find_macro_calls(&self, syntax_tree: &syn::File, target_macros: &[String]) -> Vec<(u32, u32, String, String)> {
         use syn::visit::Visit;
         
         struct MacroVisitor<'a> {
             target_macros: &'a [String],
-            content: &'a str,
             matches: Vec<(u32, u32, String, String)>,
         }
         
@@ -293,7 +292,6 @@ impl PatternEngine {
         
         let mut visitor = MacroVisitor {
             target_macros,
-            content,
             matches: Vec::new(),
         };
         
@@ -301,16 +299,15 @@ impl PatternEngine {
         visitor.matches
     }
     
-    /// Find functions that return Ok(()) with no meaningful implementation
-    fn find_empty_ok_returns(&self, syntax_tree: &syn::File, content: &str) -> Vec<(u32, u32, String)> {
+    /// Find functions that return empty Ok(()) responses
+    fn find_empty_ok_returns(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String)> {
         use syn::visit::Visit;
         
-        struct EmptyOkVisitor<'a> {
-            content: &'a str,
+        struct EmptyOkVisitor {
             matches: Vec<(u32, u32, String)>,
         }
         
-        impl<'a> Visit<'_> for EmptyOkVisitor<'a> {
+        impl Visit<'_> for EmptyOkVisitor {
             fn visit_item_fn(&mut self, func: &syn::ItemFn) {
                 // Check if function returns Result type
                 if let syn::ReturnType::Type(_, return_type) = &func.sig.output {
@@ -329,7 +326,7 @@ impl PatternEngine {
             }
         }
         
-        impl<'a> EmptyOkVisitor<'a> {
+        impl EmptyOkVisitor {
             fn is_result_type(&self, ty: &syn::Type) -> bool {
                 match ty {
                     syn::Type::Path(type_path) => {
@@ -375,7 +372,6 @@ impl PatternEngine {
         }
         
         let mut visitor = EmptyOkVisitor {
-            content,
             matches: Vec::new(),
         };
         
@@ -515,18 +511,6 @@ impl PatternEngine {
 impl Default for PatternEngine {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Helper function to get location from proc_macro2 span information
-fn get_location_from_content(content: &str, line: u32, col: u32) -> (u32, u32, String) {
-    let lines: Vec<&str> = content.lines().collect();
-    
-    if line > 0 && (line as usize) <= lines.len() {
-        let context = lines[(line - 1) as usize].trim().to_string();
-        (line, col, context)
-    } else {
-        (line, col, "".to_string())
     }
 }
 
