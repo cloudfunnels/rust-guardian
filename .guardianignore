@@ -1,0 +1,66 @@
+# Default ignore patterns for Rust Guardian
+# This file works like .gitignore but for Guardian analysis
+
+# Build outputs
+target/
+dist/
+build/
+out/
+
+# Dependencies
+node_modules/
+vendor/
+
+# Generated files
+*.generated.*
+*.pb.rs
+schema.rs
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*~
+.#*
+\#*#
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Cache and local data
+.cache/
+.local/
+*.cache
+
+# Test artifacts
+coverage/
+*.profraw
+*.profdata
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Documentation build outputs (but not source docs)
+docs/_build/
+docs/build/
+site/
+
+# Example: Project-specific exclusions
+# legacy/
+# deprecated/
+# !legacy/important_module.rs  # Override to include specific important files
