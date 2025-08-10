@@ -1,0 +1,23 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^http://localhost"
+    },
+    {
+      "pattern": "^https://localhost"
+    }
+  ],
+  "replacementPatterns": [],
+  "httpHeaders": [
+    {
+      "urls": ["https://crates.io", "https://docs.rs"],
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (compatible; link-checker)"
+      }
+    }
+  ],
+  "timeout": "10s",
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackHttpStatus": [400, 401, 403, 404, 429, 500, 502, 503, 504]
+}

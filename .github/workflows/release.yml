@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  pre-release-checks:
+    name: Pre-release Checks
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    
+    - name: Get version from tag
+      id: get_version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Verify version matches Cargo.toml
+      run: |
+        CARGO_VERSION=$(grep "^version = " Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+        if [ "$CARGO_VERSION" != "${{ steps.get_version.outputs.version }}" ]; then
+          echo "Version mismatch: Cargo.toml has $CARGO_VERSION but tag is ${{ steps.get_version.outputs.version }}"
+          exit 1
+        fi
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+    
+    - name: Build
+      run: cargo build --verbose --all-features
+    
+    - name: Run tests
+      run: cargo test --verbose --all-features
+    
+    - name: Test CLI functionality
+      run: |
+        cargo run -- --help
+        cargo run -- check --help
+        cargo run -- rules
+
+  publish-crates-io:
+    name: Publish to crates.io
+    needs: pre-release-checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
+
+  create-github-release:
+    name: Create GitHub Release
+    needs: [pre-release-checks, publish-crates-io]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Build release binaries
+      run: |
+        # Build for different targets
+        cargo build --release --all-features
+        
+        # Create release directory
+        mkdir -p release-artifacts
+        
+        # Copy binary and create archive
+        cp target/release/rust-guardian release-artifacts/
+        tar -czf release-artifacts/rust-guardian-${{ needs.pre-release-checks.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz -C release-artifacts rust-guardian
+        
+        # Generate checksums
+        cd release-artifacts
+        sha256sum * > checksums.txt
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Try to get changelog from git log since last tag
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -n "$PREVIOUS_TAG" ]; then
+          echo "## Changes since $PREVIOUS_TAG" > CHANGELOG.md
+          git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD >> CHANGELOG.md
+        else
+          echo "## Release ${{ needs.pre-release-checks.outputs.version }}" > CHANGELOG.md
+          echo "Initial release of rust-guardian" >> CHANGELOG.md
+        fi
+        
+        # Add installation instructions
+        echo "" >> CHANGELOG.md
+        echo "## Installation" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "\`\`\`bash" >> CHANGELOG.md
+        echo "cargo install rust-guardian" >> CHANGELOG.md
+        echo "\`\`\`" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "## Documentation" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "- [Crates.io](https://crates.io/crates/rust-guardian)" >> CHANGELOG.md
+        echo "- [Documentation](https://docs.rs/rust-guardian)" >> CHANGELOG.md
+        echo "- [Repository](https://github.com/cloudfunnels/rust-guardian)" >> CHANGELOG.md
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ needs.pre-release-checks.outputs.version }}
+        name: Release v${{ needs.pre-release-checks.outputs.version }}
+        body_path: CHANGELOG.md
+        files: |
+          release-artifacts/*.tar.gz
+          release-artifacts/checksums.txt
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

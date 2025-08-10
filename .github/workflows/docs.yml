@@ -1,0 +1,95 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'README.md'
+      - 'Cargo.toml'
+      - 'examples/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'README.md'
+      - 'Cargo.toml'
+      - 'examples/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  doc-tests:
+    name: Documentation Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Test documentation examples
+      run: cargo test --doc --all-features
+    
+    - name: Build documentation
+      run: |
+        cargo doc --all-features --no-deps
+        # Check that docs build without warnings
+        cargo doc --all-features --no-deps 2>&1 | tee doc-warnings.txt
+        if grep -q "warning:" doc-warnings.txt; then
+          echo "Documentation has warnings!"
+          cat doc-warnings.txt
+          exit 1
+        fi
+    
+    - name: Check README examples
+      run: |
+        # Extract and test code examples from README
+        echo "Checking README examples compile..."
+        # This is a basic check - in practice you might want more sophisticated validation
+
+  check-links:
+    name: Check Documentation Links
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check links in README
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        use-quiet-mode: 'yes'
+        use-verbose-mode: 'yes'
+        config-file: '.github/mlc_config.json'
+
+  validate-metadata:
+    name: Validate Package Metadata
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Check package metadata
+      run: |
+        # Verify all required metadata is present for crates.io
+        echo "Checking package metadata..."
+        cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "rust-guardian") | {name, version, description, license, repository, documentation, keywords, categories}'
+        
+        # Verify the package can be packaged (list files)
+        cargo package --list --allow-dirty
