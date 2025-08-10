@@ -621,11 +621,6 @@ async fn run_watch_analysis_with_config(
     Ok(())
 }
 
-/// Legacy wrapper for backward compatibility
-async fn run_watch_analysis(watch_path: &Path, patterns: &[String]) -> GuardianResult<()> {
-    run_watch_analysis_with_config(watch_path, patterns, None).await
-}
-
 fn run_validate_config(config_path: Option<PathBuf>) -> GuardianResult<i32> {
     let config_path = config_path.unwrap_or_else(|| PathBuf::from("rust_guardian.yaml"));
     
