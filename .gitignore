@@ -1,5 +1,6 @@
 # Rust build artifacts
-/target/
+/target
+Cargo.lock
 
 # IDE files
 .vscode/
@@ -19,6 +20,18 @@ Thumbs.db
 
 # Log files
 *.log
+
+# Environment files
+.env
+.env.local
+
+# Coverage reports
+tarpaulin-report.html
+lcov.info
+coverage/
+
+# Benchmark results
+target/criterion/
 
 # Temporary files
 *.tmp
