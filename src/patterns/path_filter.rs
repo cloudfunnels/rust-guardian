@@ -45,7 +45,7 @@ impl PathFilter {
             };
 
             let pattern = glob::Pattern::new(&pattern_str).map_err(|e| {
-                GuardianError::pattern(format!("Invalid pattern '{}': {}", pattern_str, e))
+                GuardianError::pattern(format!("Invalid pattern '{pattern_str}': {e}"))
             })?;
 
             filter_patterns.push(FilterPattern {
@@ -63,7 +63,7 @@ impl PathFilter {
     }
 
     /// Create a default path filter with sensible exclusions
-    pub fn default() -> GuardianResult<Self> {
+    pub fn with_defaults() -> GuardianResult<Self> {
         Self::new(
             vec![
                 // Exclude common build/cache directories
@@ -205,10 +205,8 @@ impl PathFilter {
             let path = entry.path();
 
             // Only process files, not directories
-            if path.is_file() {
-                if self.should_analyze(path)? {
-                    files.push(path.to_path_buf());
-                }
+            if path.is_file() && self.should_analyze(path)? {
+                files.push(path.to_path_buf());
             }
         }
 
@@ -236,9 +234,8 @@ impl PathFilter {
             (false, pattern)
         };
 
-        let glob_pattern = glob::Pattern::new(&pattern_str).map_err(|e| {
-            GuardianError::pattern(format!("Invalid pattern '{}': {}", pattern_str, e))
-        })?;
+        let glob_pattern = glob::Pattern::new(&pattern_str)
+            .map_err(|e| GuardianError::pattern(format!("Invalid pattern '{pattern_str}': {e}")))?;
 
         self.patterns.push(FilterPattern {
             pattern: glob_pattern,
@@ -447,7 +444,7 @@ mod tests {
 
     #[test]
     fn test_default_filter() {
-        let filter = PathFilter::default().unwrap();
+        let filter = PathFilter::with_defaults().unwrap();
 
         // Should exclude target directory
         assert!(!filter

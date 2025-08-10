@@ -92,7 +92,7 @@ impl Analyzer {
         };
 
         let path_filter = PathFilter::new(config.paths.patterns.clone(), ignore_file)
-            .map_err(|e| GuardianError::config(format!("Failed to create path filter: {}", e)))?;
+            .map_err(|e| GuardianError::config(format!("Failed to create path filter: {e}")))?;
 
         Ok(Self {
             config,
@@ -120,7 +120,7 @@ impl Analyzer {
         let content = fs::read_to_string(file_path).map_err(|e| {
             GuardianError::analysis(
                 file_path.display().to_string(),
-                format!("Failed to read file: {}", e),
+                format!("Failed to read file: {e}"),
             )
         })?;
 
@@ -133,7 +133,7 @@ impl Analyzer {
             .map_err(|e| {
                 GuardianError::analysis(
                     file_path.display().to_string(),
-                    format!("Pattern analysis failed: {}", e),
+                    format!("Pattern analysis failed: {e}"),
                 )
             })?;
 
@@ -147,7 +147,7 @@ impl Analyzer {
                 .map_err(|e| {
                     GuardianError::analysis(
                         file_path.display().to_string(),
-                        format!("Rust analysis failed: {}", e),
+                        format!("Rust analysis failed: {e}"),
                     )
                 })?;
             all_violations.extend(rust_violations);
@@ -305,7 +305,7 @@ impl Analyzer {
     pub fn pattern_stats(&self) -> PatternStats {
         let mut stats = PatternStats::default();
 
-        for (_category_name, category) in &self.config.patterns {
+        for category in self.config.patterns.values() {
             if category.enabled {
                 stats.enabled_categories += 1;
 

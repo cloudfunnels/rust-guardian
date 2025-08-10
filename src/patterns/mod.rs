@@ -150,8 +150,7 @@ impl PatternEngine {
             Ok(AstPatternType::MissingCddHeader)
         } else {
             Err(GuardianError::pattern(format!(
-                "Unknown AST pattern type in rule '{}': {}",
-                rule_id, pattern
+                "Unknown AST pattern type in rule '{rule_id}': {pattern}"
             )))
         }
     }
@@ -267,7 +266,7 @@ impl PatternEngine {
                         file_path: file_path.to_path_buf(),
                         line_number: Some(line),
                         column_number: Some(col),
-                        matched_text: format!("{}!()", macro_name),
+                        matched_text: format!("{macro_name}!()"),
                         message,
                         severity: pattern.severity,
                         context: Some(context),
@@ -409,27 +408,24 @@ impl PatternEngine {
             }
 
             fn is_ok_unit_expr(&self, expr: &syn::Expr) -> bool {
-                match expr {
-                    syn::Expr::Call(call) => {
-                        // Check if it's Ok(())
-                        if let syn::Expr::Path(path) = &*call.func {
-                            if path
-                                .path
-                                .segments
-                                .last()
-                                .map(|seg| seg.ident == "Ok")
-                                .unwrap_or(false)
-                            {
-                                // Check if argument is unit type ()
-                                if call.args.len() == 1 {
-                                    if let syn::Expr::Tuple(tuple) = &call.args[0] {
-                                        return tuple.elems.is_empty();
-                                    }
+                if let syn::Expr::Call(call) = expr {
+                    // Check if it's Ok(())
+                    if let syn::Expr::Path(path) = &*call.func {
+                        if path
+                            .path
+                            .segments
+                            .last()
+                            .map(|seg| seg.ident == "Ok")
+                            .unwrap_or(false)
+                        {
+                            // Check if argument is unit type ()
+                            if call.args.len() == 1 {
+                                if let syn::Expr::Tuple(tuple) = &call.args[0] {
+                                    return tuple.elems.is_empty();
                                 }
                             }
                         }
                     }
-                    _ => {}
                 }
                 false
             }

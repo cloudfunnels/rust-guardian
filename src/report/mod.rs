@@ -24,19 +24,25 @@ pub enum OutputFormat {
     GitHub,
 }
 
-impl OutputFormat {
+use std::str::FromStr;
+
+impl FromStr for OutputFormat {
+    type Err = String;
+
     /// Parse format from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "human" => Some(Self::Human),
-            "json" => Some(Self::Json),
-            "junit" => Some(Self::Junit),
-            "sarif" => Some(Self::Sarif),
-            "github" => Some(Self::GitHub),
-            _ => None,
+            "human" => Ok(Self::Human),
+            "json" => Ok(Self::Json),
+            "junit" => Ok(Self::Junit),
+            "sarif" => Ok(Self::Sarif),
+            "github" => Ok(Self::GitHub),
+            _ => Err(format!("Unknown output format: {s}")),
         }
     }
+}
 
+impl OutputFormat {
     /// Get all available format names
     pub fn all_formats() -> &'static [&'static str] {
         &["human", "json", "junit", "sarif", "github"]
@@ -79,11 +85,6 @@ impl ReportFormatter {
     /// Create a new report formatter with options
     pub fn new(options: ReportOptions) -> Self {
         Self { options }
-    }
-
-    /// Create a formatter with default options
-    pub fn default() -> Self {
-        Self::new(ReportOptions::default())
     }
 
     /// Format a validation report in the specified format
@@ -161,11 +162,10 @@ impl ReportFormatter {
             if self.options.use_colors {
                 let color = if report.has_errors() { "31" } else { "33" };
                 output.push_str(&format!(
-                    "{} \x1b[{}mCode Quality Violations Found\x1b[0m\n\n",
-                    icon, color
+                    "{icon} \x1b[{color}mCode Quality Violations Found\x1b[0m\n\n"
                 ));
             } else {
-                output.push_str(&format!("{} Code Quality Violations Found\n\n", icon));
+                output.push_str(&format!("{icon} Code Quality Violations Found\n\n"));
             }
 
             // Group violations by file
@@ -192,7 +192,7 @@ impl ReportFormatter {
                     };
 
                     let position = match (violation.line_number, violation.column_number) {
-                        (Some(line), Some(col)) => format!("{}:{}", line, col),
+                        (Some(line), Some(col)) => format!("{line}:{col}"),
                         (Some(line), None) => line.to_string(),
                         _ => "?".to_string(),
                     };
@@ -221,9 +221,9 @@ impl ReportFormatter {
                     if self.options.show_context {
                         if let Some(context) = &violation.context {
                             if self.options.use_colors {
-                                output.push_str(&format!("    \x1b[2m│ {}\x1b[0m\n", context));
+                                output.push_str(&format!("    \x1b[2m│ {context}\x1b[0m\n"));
                             } else {
-                                output.push_str(&format!("    │ {}\n", context));
+                                output.push_str(&format!("    │ {context}\n"));
                             }
                         }
                     }
@@ -232,9 +232,9 @@ impl ReportFormatter {
                     if self.options.show_suggestions {
                         if let Some(suggestion) = &violation.suggested_fix {
                             if self.options.use_colors {
-                                output.push_str(&format!("    \x1b[32m💡 {}\x1b[0m\n", suggestion));
+                                output.push_str(&format!("    \x1b[32m💡 {suggestion}\x1b[0m\n"));
                             } else {
-                                output.push_str(&format!("    💡 {}\n", suggestion));
+                                output.push_str(&format!("    💡 {suggestion}\n"));
                             }
                         }
                     }
@@ -290,8 +290,7 @@ impl ReportFormatter {
 
         serde_json::to_string_pretty(&json_report).map_err(|e| {
             crate::domain::violations::GuardianError::config(format!(
-                "JSON serialization failed: {}",
-                e
+                "JSON serialization failed: {e}"
             ))
         })
     }
@@ -314,8 +313,7 @@ impl ReportFormatter {
         let execution_time = (report.summary.execution_time_ms as f64) / 1000.0;
 
         xml.push_str(&format!(
-            "<testsuite name=\"rust-guardian\" tests=\"{}\" failures=\"{}\" errors=\"{}\" time=\"{:.3}\">\n",
-            total_tests, failures, errors, execution_time
+            "<testsuite name=\"rust-guardian\" tests=\"{total_tests}\" failures=\"{failures}\" errors=\"{errors}\" time=\"{execution_time:.3}\">\n"
         ));
 
         for violation in violations {
@@ -407,8 +405,7 @@ impl ReportFormatter {
 
         serde_json::to_string_pretty(&sarif_report).map_err(|e| {
             crate::domain::violations::GuardianError::config(format!(
-                "SARIF serialization failed: {}",
-                e
+                "SARIF serialization failed: {e}"
             ))
         })
     }
@@ -429,15 +426,15 @@ impl ReportFormatter {
             };
 
             let position = match (violation.line_number, violation.column_number) {
-                (Some(line), Some(col)) => format!("line={},col={}", line, col),
-                (Some(line), None) => format!("line={}", line),
+                (Some(line), Some(col)) => format!("line={line},col={col}"),
+                (Some(line), None) => format!("line={line}"),
                 _ => String::new(),
             };
 
             let position_part = if position.is_empty() {
                 String::new()
             } else {
-                format!(" {}", position)
+                format!(" {position}")
             };
 
             output.push_str(&format!(
@@ -492,7 +489,7 @@ impl ReportFormatter {
                     }
                 );
                 if self.options.use_colors {
-                    parts.push(format!("\x1b[31m{}\x1b[0m", text));
+                    parts.push(format!("\x1b[31m{text}\x1b[0m"));
                 } else {
                     parts.push(text);
                 }
@@ -509,7 +506,7 @@ impl ReportFormatter {
                     }
                 );
                 if self.options.use_colors {
-                    parts.push(format!("\x1b[33m{}\x1b[0m", text));
+                    parts.push(format!("\x1b[33m{text}\x1b[0m"));
                 } else {
                     parts.push(text);
                 }
@@ -518,7 +515,7 @@ impl ReportFormatter {
             if report.summary.violations_by_severity.info > 0 {
                 let text = format!("{} info", report.summary.violations_by_severity.info);
                 if self.options.use_colors {
-                    parts.push(format!("\x1b[36m{}\x1b[0m", text));
+                    parts.push(format!("\x1b[36m{text}\x1b[0m"));
                 } else {
                     parts.push(text);
                 }
@@ -533,6 +530,13 @@ impl ReportFormatter {
         }
 
         summary
+    }
+}
+
+impl Default for ReportFormatter {
+    /// Create a formatter with default options
+    fn default() -> Self {
+        Self::new(ReportOptions::default())
     }
 }
 

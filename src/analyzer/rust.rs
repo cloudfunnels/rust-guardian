@@ -195,12 +195,12 @@ impl Visit<'_> for UnimplementedMacroVisitor {
                         "Unimplemented macro found - function needs implementation".to_string()
                     }
                     "todo" => "TODO macro found - incomplete implementation".to_string(),
-                    "panic" => format!("Panic macro found: {}", macro_name),
-                    _ => format!("Placeholder macro found: {}", macro_name),
+                    "panic" => format!("Panic macro found: {macro_name}"),
+                    _ => format!("Placeholder macro found: {macro_name}"),
                 };
 
                 let violation = Violation::new(
-                    format!("{}_macro", macro_name),
+                    format!("{macro_name}_macro"),
                     severity,
                     std::path::PathBuf::from(""), // Will be set by caller
                     message,
@@ -321,65 +321,59 @@ impl EmptyOkReturnVisitor {
     }
 
     fn is_trivial_ok_expr(&self, expr: &syn::Expr) -> bool {
-        match expr {
-            syn::Expr::Call(call) => {
-                // Check if it's Ok(...) with trivial arguments
-                if let syn::Expr::Path(path) = &*call.func {
-                    if path
-                        .path
-                        .segments
-                        .last()
-                        .map(|seg| seg.ident == "Ok")
-                        .unwrap_or(false)
-                    {
-                        // Ok() with no args is trivial
-                        if call.args.is_empty() {
-                            return true;
+        if let syn::Expr::Call(call) = expr {
+            // Check if it's Ok(...) with trivial arguments
+            if let syn::Expr::Path(path) = &*call.func {
+                if path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident == "Ok")
+                    .unwrap_or(false)
+                {
+                    // Ok() with no args is trivial
+                    if call.args.is_empty() {
+                        return true;
+                    }
+                    // Ok(()) with unit type is trivial
+                    if call.args.len() == 1 {
+                        if let syn::Expr::Tuple(tuple) = &call.args[0] {
+                            return tuple.elems.is_empty();
                         }
-                        // Ok(()) with unit type is trivial
-                        if call.args.len() == 1 {
-                            if let syn::Expr::Tuple(tuple) = &call.args[0] {
-                                return tuple.elems.is_empty();
-                            }
-                            // Ok(vec![]) is trivial
-                            if let syn::Expr::Macro(mac) = &call.args[0] {
-                                if let Some(ident) = mac.mac.path.get_ident() {
-                                    if ident == "vec" && mac.mac.tokens.is_empty() {
-                                        return true;
-                                    }
+                        // Ok(vec![]) is trivial
+                        if let syn::Expr::Macro(mac) = &call.args[0] {
+                            if let Some(ident) = mac.mac.path.get_ident() {
+                                if ident == "vec" && mac.mac.tokens.is_empty() {
+                                    return true;
                                 }
                             }
                         }
                     }
                 }
             }
-            _ => {}
         }
         false
     }
 
     fn is_trivial_some_expr(&self, expr: &syn::Expr) -> bool {
-        match expr {
-            syn::Expr::Call(call) => {
-                // Check if it's Some(...) with trivial arguments
-                if let syn::Expr::Path(path) = &*call.func {
-                    if path
-                        .path
-                        .segments
-                        .last()
-                        .map(|seg| seg.ident == "Some")
-                        .unwrap_or(false)
-                    {
-                        // Some(()) with unit type is trivial
-                        if call.args.len() == 1 {
-                            if let syn::Expr::Tuple(tuple) = &call.args[0] {
-                                return tuple.elems.is_empty();
-                            }
+        if let syn::Expr::Call(call) = expr {
+            // Check if it's Some(...) with trivial arguments
+            if let syn::Expr::Path(path) = &*call.func {
+                if path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident == "Some")
+                    .unwrap_or(false)
+                {
+                    // Some(()) with unit type is trivial
+                    if call.args.len() == 1 {
+                        if let syn::Expr::Tuple(tuple) = &call.args[0] {
+                            return tuple.elems.is_empty();
                         }
                     }
                 }
             }
-            _ => {}
         }
         false
     }
