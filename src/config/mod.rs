@@ -1,5 +1,5 @@
 //! Configuration loading and management for Rust Guardian
-//! 
+//!
 //! CDD Principle: Anti-Corruption Layer - Configuration translates external YAML formats
 //! - Raw YAML structures are converted to clean domain objects
 //! - Default configurations are embedded in the domain, not infrastructure
@@ -8,8 +8,8 @@
 use crate::domain::violations::{GuardianError, GuardianResult, Severity};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
 /// Main configuration structure for Rust Guardian
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,27 +95,35 @@ pub struct ExcludeConditions {
 impl GuardianConfig {
     /// Load configuration from a YAML file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> GuardianResult<Self> {
-        let contents = fs::read_to_string(&path)
-            .map_err(|e| GuardianError::config(format!("Failed to read config file '{}': {}", 
-                path.as_ref().display(), e)))?;
-                
-        let config: Self = serde_yaml::from_str(&contents)
-            .map_err(|e| GuardianError::config(format!("Failed to parse config file '{}': {}", 
-                path.as_ref().display(), e)))?;
-                
+        let contents = fs::read_to_string(&path).map_err(|e| {
+            GuardianError::config(format!(
+                "Failed to read config file '{}': {}",
+                path.as_ref().display(),
+                e
+            ))
+        })?;
+
+        let config: Self = serde_yaml::from_str(&contents).map_err(|e| {
+            GuardianError::config(format!(
+                "Failed to parse config file '{}': {}",
+                path.as_ref().display(),
+                e
+            ))
+        })?;
+
         config.validate()?;
         Ok(config)
     }
-    
+
     /// Load configuration from string content
     pub fn load_from_str(content: &str) -> GuardianResult<Self> {
         let config: Self = serde_yaml::from_str(content)
             .map_err(|e| GuardianError::config(format!("Failed to parse config: {}", e)))?;
-            
+
         config.validate()?;
         Ok(config)
     }
-    
+
     /// Get default configuration with built-in patterns
     pub fn default() -> Self {
         Self {
@@ -133,63 +141,68 @@ impl GuardianConfig {
             patterns: Self::default_patterns(),
         }
     }
-    
+
     /// Get default pattern definitions
     fn default_patterns() -> HashMap<String, PatternCategory> {
         let mut patterns = HashMap::new();
-        
+
         // Placeholder detection patterns
-        patterns.insert("placeholders".to_string(), PatternCategory {
-            severity: Severity::Error,
-            enabled: true,
-            rules: vec![
-                PatternRule {
-                    id: "todo_comments".to_string(),
-                    rule_type: RuleType::Regex,
-                    pattern: r"\b(TODO|FIXME|HACK|XXX|BUG|REFACTOR)\b".to_string(),
-                    message: "Placeholder comment detected: {match}".to_string(),
-                    severity: None,
-                    enabled: true,
-                    case_sensitive: false,
-                    exclude_if: None,
-                },
-                PatternRule {
-                    id: "temporary_markers".to_string(),
-                    rule_type: RuleType::Regex,
-                    pattern: r"(?i)\b(for now|temporary|placeholder|stub|dummy|fake)\b".to_string(),
-                    message: "Temporary implementation marker found: {match}".to_string(),
-                    severity: None,
-                    enabled: true,
-                    case_sensitive: false,
-                    exclude_if: Some(ExcludeConditions {
-                        attribute: None,
-                        in_tests: true,
-                        file_patterns: Some(vec!["**/tests/**".to_string()]),
-                    }),
-                },
-                PatternRule {
-                    id: "unimplemented_macros".to_string(),
-                    rule_type: RuleType::Ast,
-                    pattern: "macro_call:unimplemented|todo|panic".to_string(),
-                    message: "Unfinished macro {macro_name}! found".to_string(),
-                    severity: None,
-                    enabled: true,
-                    case_sensitive: true,
-                    exclude_if: Some(ExcludeConditions {
-                        attribute: Some("#[test]".to_string()),
-                        in_tests: true,
-                        file_patterns: None,
-                    }),
-                },
-            ],
-        });
-        
+        patterns.insert(
+            "placeholders".to_string(),
+            PatternCategory {
+                severity: Severity::Error,
+                enabled: true,
+                rules: vec![
+                    PatternRule {
+                        id: "todo_comments".to_string(),
+                        rule_type: RuleType::Regex,
+                        pattern: r"\b(TODO|FIXME|HACK|XXX|BUG|REFACTOR)\b".to_string(),
+                        message: "Placeholder comment detected: {match}".to_string(),
+                        severity: None,
+                        enabled: true,
+                        case_sensitive: false,
+                        exclude_if: None,
+                    },
+                    PatternRule {
+                        id: "temporary_markers".to_string(),
+                        rule_type: RuleType::Regex,
+                        pattern: r"(?i)\b(for now|temporary|placeholder|stub|dummy|fake)\b"
+                            .to_string(),
+                        message: "Temporary implementation marker found: {match}".to_string(),
+                        severity: None,
+                        enabled: true,
+                        case_sensitive: false,
+                        exclude_if: Some(ExcludeConditions {
+                            attribute: None,
+                            in_tests: true,
+                            file_patterns: Some(vec!["**/tests/**".to_string()]),
+                        }),
+                    },
+                    PatternRule {
+                        id: "unimplemented_macros".to_string(),
+                        rule_type: RuleType::Ast,
+                        pattern: "macro_call:unimplemented|todo|panic".to_string(),
+                        message: "Unfinished macro {macro_name}! found".to_string(),
+                        severity: None,
+                        enabled: true,
+                        case_sensitive: true,
+                        exclude_if: Some(ExcludeConditions {
+                            attribute: Some("#[test]".to_string()),
+                            in_tests: true,
+                            file_patterns: None,
+                        }),
+                    },
+                ],
+            },
+        );
+
         // Incomplete implementations
-        patterns.insert("incomplete_implementations".to_string(), PatternCategory {
-            severity: Severity::Error,
-            enabled: true,
-            rules: vec![
-                PatternRule {
+        patterns.insert(
+            "incomplete_implementations".to_string(),
+            PatternCategory {
+                severity: Severity::Error,
+                enabled: true,
+                rules: vec![PatternRule {
                     id: "empty_ok_return".to_string(),
                     rule_type: RuleType::Ast,
                     pattern: "return_ok_unit_with_no_logic".to_string(),
@@ -202,77 +215,81 @@ impl GuardianConfig {
                         in_tests: true,
                         file_patterns: None,
                     }),
-                },
-            ],
-        });
-        
+                }],
+            },
+        );
+
         // Architectural violations
-        patterns.insert("architectural_violations".to_string(), PatternCategory {
-            severity: Severity::Warning,
-            enabled: true,
-            rules: vec![
-                PatternRule {
-                    id: "hardcoded_paths".to_string(),
-                    rule_type: RuleType::Regex,
-                    pattern: r#"["\'](\./|/|\.\./)?(\.rust/)[^"']*["\']"#.to_string(),
-                    message: "Hardcoded path found - use configuration instead".to_string(),
-                    severity: None,
-                    enabled: true,
-                    case_sensitive: true,
-                    exclude_if: Some(ExcludeConditions {
-                        attribute: None,
-                        in_tests: true,
-                        file_patterns: Some(vec!["**/tests/**".to_string(), "**/examples/**".to_string()]),
-                    }),
-                },
-                PatternRule {
-                    id: "cdd_header_missing".to_string(),
-                    rule_type: RuleType::Regex,
-                    pattern: r"//!\s*(?:.*\n)*?\s*//!\s*CDD Principle:".to_string(),
-                    message: "File missing CDD principle header".to_string(),
-                    severity: Some(Severity::Info),
-                    enabled: false, // Disabled by default, can be enabled per project
-                    case_sensitive: false,
-                    exclude_if: Some(ExcludeConditions {
-                        attribute: None,
-                        in_tests: true,
-                        file_patterns: Some(vec![
-                            "**/tests/**".to_string(),
-                            "**/benches/**".to_string(),
-                            "**/examples/**".to_string(),
-                        ]),
-                    }),
-                },
-            ],
-        });
-        
+        patterns.insert(
+            "architectural_violations".to_string(),
+            PatternCategory {
+                severity: Severity::Warning,
+                enabled: true,
+                rules: vec![
+                    PatternRule {
+                        id: "hardcoded_paths".to_string(),
+                        rule_type: RuleType::Regex,
+                        pattern: r#"["\'](\./|/|\.\./)?(\.rust/)[^"']*["\']"#.to_string(),
+                        message: "Hardcoded path found - use configuration instead".to_string(),
+                        severity: None,
+                        enabled: true,
+                        case_sensitive: true,
+                        exclude_if: Some(ExcludeConditions {
+                            attribute: None,
+                            in_tests: true,
+                            file_patterns: Some(vec![
+                                "**/tests/**".to_string(),
+                                "**/examples/**".to_string(),
+                            ]),
+                        }),
+                    },
+                    PatternRule {
+                        id: "cdd_header_missing".to_string(),
+                        rule_type: RuleType::Regex,
+                        pattern: r"//!\s*(?:.*\n)*?\s*//!\s*CDD Principle:".to_string(),
+                        message: "File missing CDD principle header".to_string(),
+                        severity: Some(Severity::Info),
+                        enabled: false, // Disabled by default, can be enabled per project
+                        case_sensitive: false,
+                        exclude_if: Some(ExcludeConditions {
+                            attribute: None,
+                            in_tests: true,
+                            file_patterns: Some(vec![
+                                "**/tests/**".to_string(),
+                                "**/benches/**".to_string(),
+                                "**/examples/**".to_string(),
+                            ]),
+                        }),
+                    },
+                ],
+            },
+        );
+
         patterns
     }
-    
+
     /// Validate the configuration for consistency and correctness
     pub fn validate(&self) -> GuardianResult<()> {
         // Check version compatibility
         if !["1.0"].contains(&self.version.as_str()) {
             return Err(GuardianError::config(format!(
-                "Unsupported configuration version: {}. Supported versions: 1.0", 
+                "Unsupported configuration version: {}. Supported versions: 1.0",
                 self.version
             )));
         }
-        
+
         // Validate patterns
         for (category_name, category) in &self.patterns {
             for rule in &category.rules {
                 // Validate rule IDs are unique within category
-                let duplicate_count = category.rules.iter()
-                    .filter(|r| r.id == rule.id)
-                    .count();
+                let duplicate_count = category.rules.iter().filter(|r| r.id == rule.id).count();
                 if duplicate_count > 1 {
                     return Err(GuardianError::config(format!(
-                        "Duplicate rule ID '{}' in category '{}'", 
+                        "Duplicate rule ID '{}' in category '{}'",
                         rule.id, category_name
                     )));
                 }
-                
+
                 // Validate regex patterns can compile
                 if matches!(rule.rule_type, RuleType::Regex) {
                     if rule.case_sensitive {
@@ -281,51 +298,57 @@ impl GuardianConfig {
                         regex::RegexBuilder::new(&rule.pattern)
                             .case_insensitive(true)
                             .build()
-                    }.map_err(|e| GuardianError::config(format!(
-                        "Invalid regex pattern in rule '{}': {}", 
-                        rule.id, e
-                    )))?;
+                    }
+                    .map_err(|e| {
+                        GuardianError::config(format!(
+                            "Invalid regex pattern in rule '{}': {}",
+                            rule.id, e
+                        ))
+                    })?;
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get all enabled rules across all categories
     pub fn enabled_rules(&self) -> impl Iterator<Item = (&String, &PatternCategory, &PatternRule)> {
-        self.patterns.iter()
+        self.patterns
+            .iter()
             .filter(|(_, category)| category.enabled)
             .flat_map(|(name, category)| {
-                category.rules.iter()
+                category
+                    .rules
+                    .iter()
                     .filter(|rule| rule.enabled)
                     .map(move |rule| (name, category, rule))
             })
     }
-    
+
     /// Get effective severity for a rule (rule override or category default)
     pub fn effective_severity(&self, category: &PatternCategory, rule: &PatternRule) -> Severity {
         rule.severity.unwrap_or(category.severity)
     }
-    
+
     /// Convert to JSON for serialization
     pub fn to_json(&self) -> GuardianResult<String> {
         serde_json::to_string_pretty(self)
             .map_err(|e| GuardianError::config(format!("Failed to serialize config: {}", e)))
     }
-    
+
     /// Create a fingerprint of the configuration for cache validation
     pub fn fingerprint(&self) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
-        
+
         // Create a stable representation for hashing
         // Sort patterns to ensure consistent ordering
         let mut sorted_patterns: Vec<_> = self.patterns.iter().collect();
         sorted_patterns.sort_by_key(|(name, _)| name.as_str());
-        
+
         // Hash version and path config
         self.version.hash(&mut hasher);
         self.paths.patterns.len().hash(&mut hasher);
@@ -333,17 +356,17 @@ impl GuardianConfig {
             pattern.hash(&mut hasher);
         }
         self.paths.ignore_file.hash(&mut hasher);
-        
+
         // Hash patterns in sorted order
         for (category_name, category) in sorted_patterns {
             category_name.hash(&mut hasher);
             category.severity.hash(&mut hasher);
             category.enabled.hash(&mut hasher);
-            
+
             // Sort rules for consistent ordering
             let mut sorted_rules = category.rules.clone();
             sorted_rules.sort_by_key(|rule| rule.id.clone());
-            
+
             for rule in sorted_rules {
                 rule.id.hash(&mut hasher);
                 rule.pattern.hash(&mut hasher);
@@ -352,7 +375,7 @@ impl GuardianConfig {
                 rule.case_sensitive.hash(&mut hasher);
             }
         }
-        
+
         format!("{:x}", hasher.finish())
     }
 }
@@ -379,25 +402,25 @@ impl ConfigBuilder {
             config: GuardianConfig::default(),
         }
     }
-    
+
     /// Add a path pattern
     pub fn add_path_pattern(mut self, pattern: impl Into<String>) -> Self {
         self.config.paths.patterns.push(pattern.into());
         self
     }
-    
+
     /// Set the ignore file name
     pub fn ignore_file(mut self, filename: impl Into<String>) -> Self {
         self.config.paths.ignore_file = Some(filename.into());
         self
     }
-    
+
     /// Add a pattern category
     pub fn add_category(mut self, name: impl Into<String>, category: PatternCategory) -> Self {
         self.config.patterns.insert(name.into(), category);
         self
     }
-    
+
     /// Build the final configuration
     pub fn build(self) -> GuardianResult<GuardianConfig> {
         self.config.validate()?;
@@ -414,7 +437,7 @@ impl Default for ConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = GuardianConfig::default();
@@ -422,38 +445,38 @@ mod tests {
         assert!(config.patterns.contains_key("placeholders"));
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_config_validation() {
         let mut config = GuardianConfig::default();
         config.version = "999.0".to_string();
         assert!(config.validate().is_err());
     }
-    
+
     #[test]
     fn test_enabled_rules() {
         let config = GuardianConfig::default();
         let rules: Vec<_> = config.enabled_rules().collect();
         assert!(!rules.is_empty());
-        
+
         // All returned rules should be enabled
         for (_, category, rule) in rules {
             assert!(category.enabled);
             assert!(rule.enabled);
         }
     }
-    
+
     #[test]
     fn test_config_fingerprint() {
         let config1 = GuardianConfig::default();
         let config2 = GuardianConfig::default();
         assert_eq!(config1.fingerprint(), config2.fingerprint());
-        
+
         let mut config3 = GuardianConfig::default();
         config3.paths.patterns.push("new_pattern".to_string());
         assert_ne!(config1.fingerprint(), config3.fingerprint());
     }
-    
+
     #[test]
     fn test_config_builder() {
         let config = ConfigBuilder::new()
@@ -461,11 +484,14 @@ mod tests {
             .ignore_file(".customignore")
             .build()
             .unwrap();
-            
-        assert!(config.paths.patterns.contains(&"custom/path/**".to_string()));
+
+        assert!(config
+            .paths
+            .patterns
+            .contains(&"custom/path/**".to_string()));
         assert_eq!(config.paths.ignore_file, Some(".customignore".to_string()));
     }
-    
+
     #[test]
     fn test_yaml_serialization() {
         let config = GuardianConfig::default();

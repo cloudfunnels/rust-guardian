@@ -1,5 +1,5 @@
 //! Domain layer for Rust Guardian
-//! 
+//!
 //! CDD Principle: Domain Model - Pure business logic for code quality enforcement
 //! - Contains all core entities, value objects, and domain services
 //! - Independent of infrastructure concerns like databases, file systems, or external APIs
