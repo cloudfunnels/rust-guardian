@@ -54,6 +54,14 @@ enum AstPatternType {
     EmptyOkReturn,
     /// Look for missing CDD headers in files
     MissingCddHeader,
+    /// Look for functions with empty bodies
+    EmptyFunctionBody,
+    /// Look for unwrap() or expect() calls without meaningful error messages
+    UnwrapOrExpectWithoutMessage,
+    /// Look for direct substrate access (semantic pattern)
+    DirectSubstrateAccess(regex::Regex),
+    /// Look for domain modules importing infrastructure (semantic pattern)
+    DomainImportsInfrastructure(regex::Regex),
 }
 
 /// A match found by a pattern
@@ -110,8 +118,15 @@ impl PatternEngine {
                 });
             }
             RuleType::Semantic | RuleType::ImportAnalysis => {
-                // TODO: Implement semantic and import analysis patterns
-                tracing::warn!("Semantic and import analysis patterns not yet implemented: {}", rule.id);
+                let pattern_type = self.parse_semantic_pattern(&rule.pattern, &rule.id)?;
+                
+                self.ast_patterns.insert(rule.id.clone(), AstPattern {
+                    pattern_type,
+                    rule_id: rule.id.clone(),
+                    message_template: rule.message.clone(),
+                    severity: effective_severity,
+                    exclude_conditions: rule.exclude_if.clone(),
+                });
             }
         }
         
@@ -131,8 +146,27 @@ impl PatternEngine {
             Ok(AstPatternType::EmptyOkReturn)
         } else if pattern.contains("CDD Principle:") {
             Ok(AstPatternType::MissingCddHeader)
+        } else if pattern == "empty_function_body" {
+            Ok(AstPatternType::EmptyFunctionBody)
+        } else if pattern == "unwrap_or_expect_without_message" {
+            Ok(AstPatternType::UnwrapOrExpectWithoutMessage)
         } else {
             Err(GuardianError::pattern(format!("Unknown AST pattern type in rule '{}': {}", rule_id, pattern)))
+        }
+    }
+    
+    /// Parse semantic pattern string into typed pattern
+    fn parse_semantic_pattern(&self, pattern: &str, rule_id: &str) -> GuardianResult<AstPatternType> {
+        // Build regex for semantic patterns
+        let regex = regex::Regex::new(pattern)
+            .map_err(|e| GuardianError::pattern(format!("Invalid semantic pattern regex in rule '{}': {}", rule_id, e)))?;
+            
+        if pattern.contains("substrate") && !pattern.contains("traits") {
+            Ok(AstPatternType::DirectSubstrateAccess(regex))
+        } else if pattern.contains("infrastructure") {
+            Ok(AstPatternType::DomainImportsInfrastructure(regex))
+        } else {
+            Err(GuardianError::pattern(format!("Unknown semantic pattern type in rule '{}': {}", rule_id, pattern)))
         }
     }
     
@@ -226,6 +260,46 @@ impl PatternEngine {
                     });
                 }
             }
+            AstPatternType::DirectSubstrateAccess(regex) => {
+                let found_matches = self.find_import_pattern_matches(&syntax_tree, content, regex);
+                for (line, col, import_text, context) in found_matches {
+                    // Check exclude conditions
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: import_text,
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::DomainImportsInfrastructure(regex) => {
+                let found_matches = self.find_import_pattern_matches(&syntax_tree, content, regex);
+                for (line, col, import_text, context) in found_matches {
+                    // Check exclude conditions  
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: import_text,
+                        message: pattern.message_template.clone(),
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
             AstPatternType::EmptyOkReturn => {
                 let found_matches = self.find_empty_ok_returns(&syntax_tree);
                 for (line, col, context) in found_matches {
@@ -260,6 +334,50 @@ impl PatternEngine {
                     });
                 }
             }
+            AstPatternType::EmptyFunctionBody => {
+                let found_matches = self.find_empty_function_bodies(&syntax_tree);
+                for (line, col, fn_name, context) in found_matches {
+                    // Check exclude conditions
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    let message = pattern.message_template.replace("{function_name}", &fn_name);
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!("fn {}", fn_name),
+                        message,
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
+            AstPatternType::UnwrapOrExpectWithoutMessage => {
+                let found_matches = self.find_unwrap_without_message(&syntax_tree);
+                for (line, col, method_name, context) in found_matches {
+                    // Check exclude conditions
+                    if self.should_exclude_ast_match(pattern.exclude_conditions.as_ref(), file_path, &syntax_tree, line) {
+                        continue;
+                    }
+                    
+                    let message = pattern.message_template.replace("{method}", &method_name);
+                    
+                    matches.push(PatternMatch {
+                        rule_id: pattern.rule_id.clone(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: Some(line),
+                        column_number: Some(col),
+                        matched_text: format!(".{}()", method_name),
+                        message,
+                        severity: pattern.severity,
+                        context: Some(context),
+                    });
+                }
+            }
         }
         
         Ok(matches)
@@ -280,10 +398,10 @@ impl PatternEngine {
                     let macro_name = ident.to_string();
                     if self.target_macros.contains(&macro_name) {
                         let _span = mac.path.span();
-                        // Use a simple line-based location since proc_macro2::Span doesn't have start() method
-                        // Use a simple line-based location since proc_macro2::Span doesn't have start() method
-                let (line, col, context) = (1, 1, String::new());
-                        self.matches.push((line, col, macro_name, context));
+                        // proc_macro2::Span doesn't provide direct line/column access in stable Rust
+                        // For now, use line 1 but provide better context
+                        let context = format!("{}!()", macro_name);
+                        self.matches.push((1, 1, macro_name, context));
                     }
                 }
                 syn::visit::visit_macro(self, mac);
@@ -298,6 +416,7 @@ impl PatternEngine {
         visitor.visit_file(syntax_tree);
         visitor.matches
     }
+    
     
     /// Find functions that return empty Ok(()) responses
     fn find_empty_ok_returns(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String)> {
@@ -372,6 +491,133 @@ impl PatternEngine {
         }
         
         let mut visitor = EmptyOkVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find functions with empty bodies
+    fn find_empty_function_bodies(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct EmptyBodyVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for EmptyBodyVisitor {
+            fn visit_item_fn(&mut self, func: &syn::ItemFn) {
+                let fn_name = func.sig.ident.to_string();
+                
+                // Check if function body is empty or has only comments/whitespace
+                if func.block.stmts.is_empty() {
+                    // Function has completely empty body
+                    let (line, col, context) = (1, 1, format!("fn {} {{ }}", fn_name));
+                    self.matches.push((line, col, fn_name, context));
+                } else if func.block.stmts.len() == 1 {
+                    // Check if the single statement is just a comment or empty expression
+                    if let syn::Stmt::Expr(expr, _) = &func.block.stmts[0] {
+                        if matches!(expr, syn::Expr::Tuple(tuple) if tuple.elems.is_empty()) {
+                            // Function body contains only ()
+                            let (line, col, context) = (1, 1, format!("fn {} {{ () }}", fn_name));
+                            self.matches.push((line, col, fn_name, context));
+                        }
+                    }
+                }
+                
+                syn::visit::visit_item_fn(self, func);
+            }
+        }
+        
+        let mut visitor = EmptyBodyVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find unwrap() or expect() calls without meaningful error messages
+    fn find_unwrap_without_message(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct UnwrapVisitor {
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl Visit<'_> for UnwrapVisitor {
+            fn visit_expr_method_call(&mut self, method_call: &syn::ExprMethodCall) {
+                let method_name = method_call.method.to_string();
+                
+                match method_name.as_str() {
+                    "unwrap" => {
+                        // unwrap() calls are always problematic
+                        let (line, col, context) = (1, 1, format!(".unwrap()"));
+                        self.matches.push((line, col, "unwrap".to_string(), context));
+                    }
+                    "expect" => {
+                        // Check if expect() has a meaningful message
+                        if method_call.args.is_empty() {
+                            // expect() without any message
+                            let (line, col, context) = (1, 1, format!(".expect()"));
+                            self.matches.push((line, col, "expect".to_string(), context));
+                        } else if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &method_call.args[0] {
+                            let message = lit_str.value();
+                            // Check for generic/unhelpful messages
+                            if message.is_empty() || 
+                               message.len() < 5 || 
+                               message.to_lowercase().contains("error") && message.len() < 10 {
+                                let (line, col, context) = (1, 1, format!(".expect(\"{}\")", message));
+                                self.matches.push((line, col, "expect".to_string(), context));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                
+                syn::visit::visit_expr_method_call(self, method_call);
+            }
+        }
+        
+        let mut visitor = UnwrapVisitor {
+            matches: Vec::new(),
+        };
+        
+        visitor.visit_file(syntax_tree);
+        visitor.matches
+    }
+    
+    /// Find import patterns using regex matching on use statements
+    fn find_import_pattern_matches(&self, syntax_tree: &syn::File, content: &str, regex: &regex::Regex) -> Vec<(u32, u32, String, String)> {
+        use syn::visit::Visit;
+        
+        struct ImportVisitor<'a> {
+            regex: &'a regex::Regex,
+            content: &'a str,
+            matches: Vec<(u32, u32, String, String)>,
+        }
+        
+        impl<'a> Visit<'_> for ImportVisitor<'a> {
+            fn visit_item_use(&mut self, use_item: &syn::ItemUse) {
+                // Convert the use statement back to string for regex matching
+                let use_string = format!("use {};", quote::quote!(#use_item).to_string().trim_start_matches("use "));
+                
+                if self.regex.is_match(&use_string) {
+                    // Extract line information from the use statement
+                    // For now, use simple line tracking - in a real implementation,
+                    // we'd use syn span information for precise location
+                    let (line, col, context) = (1, 1, use_string.clone());
+                    self.matches.push((line, col, use_string, context));
+                }
+                
+                syn::visit::visit_item_use(self, use_item);
+            }
+        }
+        
+        let mut visitor = ImportVisitor {
+            regex,
+            content,
             matches: Vec::new(),
         };
         
