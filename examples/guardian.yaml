@@ -85,7 +85,7 @@ patterns:
     rules:
       - id: hardcoded_paths
         type: regex
-        pattern: '["\'](/tmp/|/var/|/home/)[^"\']*["\']'
+        pattern: "[\"'](/tmp/|/var/|/home/)[^\"']*[\"']"
         message: "Hardcoded path found - use configuration instead"
         case_sensitive: true
         exclude_if:
@@ -142,7 +142,7 @@ patterns:
       
       - id: magic_numbers
         type: regex
-        pattern: '\b(?<![\w.])\d{3,}\b(?![\w.])'
+        pattern: '\b\d{3,}\b'
         message: "Magic number found: {match} - consider using a named constant"
         enabled: false  # Disabled by default
         exclude_if:
