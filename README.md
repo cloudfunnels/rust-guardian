@@ -563,6 +563,24 @@ Licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
+## Why Guardian Exists
+
+Every Rust developer knows the gap between "it compiles" and "it's complete." This gap becomes a chasm when using AI assistance or working in teams. AI generates syntactically perfect code filled with TODOs and placeholders. Teams merge "temporary" solutions that become permanent. Technical debt accumulates invisibly.
+
+Guardian was born from a simple realization: **Compilable ≠ Complete**.
+
+We built Guardian because we believe every line of code deserves to be finished, not just functional. Whether written by human, AI, or collaborative development, code should be complete, intentional, and ready for production.
+
+This tool enforces what code reviews miss, what AI forgets to finish, and what "we'll fix it later" never addresses. It's not just about catching TODOs - it's about ensuring that every function that compiles actually does what it promises.
+
+Guardian stands watch so you can focus on creating, knowing that nothing incomplete will slip through.
+
+Built with love for the craft of software development.
+
+Done and done.
+
+— ARIA Systems
+
 ## Support
 
 - **Documentation**: [docs.rs/rust-guardian](https://docs.rs/rust-guardian)

@@ -746,7 +746,7 @@ impl PatternEngine {
             matches: Vec<(u32, u32, String, String)>,
         }
 
-        impl<'a> Visit<'_> for MacroVisitor<'a> {
+        impl Visit<'_> for MacroVisitor<'_> {
             fn visit_macro(&mut self, mac: &syn::Macro) {
                 if let Some(ident) = mac.path.get_ident() {
                     let macro_name = ident.to_string();
@@ -909,14 +909,14 @@ impl PatternEngine {
                 match method_name.as_str() {
                     "unwrap" => {
                         // unwrap() calls are always problematic
-                        let (line, col, context) = (1, 1, format!(".unwrap()"));
+                        let (line, col, context) = (1, 1, ".unwrap()".to_string());
                         self.matches.push((line, col, "unwrap".to_string(), context));
                     }
                     "expect" => {
                         // Check if expect() has a meaningful message
                         if method_call.args.is_empty() {
                             // expect() without any message
-                            let (line, col, context) = (1, 1, format!(".expect()"));
+                            let (line, col, context) = (1, 1, ".expect()".to_string());
                             self.matches.push((line, col, "expect".to_string(), context));
                         } else if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &method_call.args[0] {
                             let message = lit_str.value();
@@ -945,16 +945,15 @@ impl PatternEngine {
     }
     
     /// Find import patterns using regex matching on use statements
-    fn find_import_pattern_matches(&self, syntax_tree: &syn::File, content: &str, regex: &regex::Regex) -> Vec<(u32, u32, String, String)> {
+    fn find_import_pattern_matches(&self, syntax_tree: &syn::File, _content: &str, regex: &regex::Regex) -> Vec<(u32, u32, String, String)> {
         use syn::visit::Visit;
         
         struct ImportVisitor<'a> {
             regex: &'a regex::Regex,
-            content: &'a str,
             matches: Vec<(u32, u32, String, String)>,
         }
         
-        impl<'a> Visit<'_> for ImportVisitor<'a> {
+        impl Visit<'_> for ImportVisitor<'_> {
             fn visit_item_use(&mut self, use_item: &syn::ItemUse) {
                 // Convert the use statement back to string for regex matching
                 let use_string = format!("use {};", quote::quote!(#use_item).to_string().trim_start_matches("use "));
@@ -973,7 +972,6 @@ impl PatternEngine {
         
         let mut visitor = ImportVisitor {
             regex,
-            content,
             matches: Vec::new(),
         };
         
@@ -1180,45 +1178,37 @@ impl PatternEngine {
         
         impl Visit<'_> for PublicDocsVisitor {
             fn visit_item_fn(&mut self, func: &syn::ItemFn) {
-                if matches!(func.vis, syn::Visibility::Public(_)) {
-                    if !self.has_doc_comment(&func.attrs) {
-                        let fn_name = func.sig.ident.to_string();
-                        let (line, col, context) = (1, 1, format!("pub fn {}", fn_name));
-                        self.matches.push((line, col, format!("fn {}", fn_name), context));
-                    }
+                if matches!(func.vis, syn::Visibility::Public(_)) && !self.has_doc_comment(&func.attrs) {
+                    let fn_name = func.sig.ident.to_string();
+                    let (line, col, context) = (1, 1, format!("pub fn {}", fn_name));
+                    self.matches.push((line, col, format!("fn {}", fn_name), context));
                 }
                 syn::visit::visit_item_fn(self, func);
             }
             
             fn visit_item_struct(&mut self, item_struct: &syn::ItemStruct) {
-                if matches!(item_struct.vis, syn::Visibility::Public(_)) {
-                    if !self.has_doc_comment(&item_struct.attrs) {
-                        let struct_name = item_struct.ident.to_string();
-                        let (line, col, context) = (1, 1, format!("pub struct {}", struct_name));
-                        self.matches.push((line, col, format!("struct {}", struct_name), context));
-                    }
+                if matches!(item_struct.vis, syn::Visibility::Public(_)) && !self.has_doc_comment(&item_struct.attrs) {
+                    let struct_name = item_struct.ident.to_string();
+                    let (line, col, context) = (1, 1, format!("pub struct {}", struct_name));
+                    self.matches.push((line, col, format!("struct {}", struct_name), context));
                 }
                 syn::visit::visit_item_struct(self, item_struct);
             }
             
             fn visit_item_enum(&mut self, item_enum: &syn::ItemEnum) {
-                if matches!(item_enum.vis, syn::Visibility::Public(_)) {
-                    if !self.has_doc_comment(&item_enum.attrs) {
-                        let enum_name = item_enum.ident.to_string();
-                        let (line, col, context) = (1, 1, format!("pub enum {}", enum_name));
-                        self.matches.push((line, col, format!("enum {}", enum_name), context));
-                    }
+                if matches!(item_enum.vis, syn::Visibility::Public(_)) && !self.has_doc_comment(&item_enum.attrs) {
+                    let enum_name = item_enum.ident.to_string();
+                    let (line, col, context) = (1, 1, format!("pub enum {}", enum_name));
+                    self.matches.push((line, col, format!("enum {}", enum_name), context));
                 }
                 syn::visit::visit_item_enum(self, item_enum);
             }
             
             fn visit_item_trait(&mut self, item_trait: &syn::ItemTrait) {
-                if matches!(item_trait.vis, syn::Visibility::Public(_)) {
-                    if !self.has_doc_comment(&item_trait.attrs) {
-                        let trait_name = item_trait.ident.to_string();
-                        let (line, col, context) = (1, 1, format!("pub trait {}", trait_name));
-                        self.matches.push((line, col, format!("trait {}", trait_name), context));
-                    }
+                if matches!(item_trait.vis, syn::Visibility::Public(_)) && !self.has_doc_comment(&item_trait.attrs) {
+                    let trait_name = item_trait.ident.to_string();
+                    let (line, col, context) = (1, 1, format!("pub trait {}", trait_name));
+                    self.matches.push((line, col, format!("trait {}", trait_name), context));
                 }
                 syn::visit::visit_item_trait(self, item_trait);
             }
@@ -1243,16 +1233,15 @@ impl PatternEngine {
     }
     
     /// Find functions that are too long
-    fn find_long_functions(&self, syntax_tree: &syn::File, content: &str, threshold: u32) -> Vec<(u32, u32, String, u32, String)> {
+    fn find_long_functions(&self, syntax_tree: &syn::File, _content: &str, threshold: u32) -> Vec<(u32, u32, String, u32, String)> {
         use syn::visit::Visit;
         
-        struct LongFunctionVisitor<'a> {
-            content: &'a str,
+        struct LongFunctionVisitor {
             threshold: u32,
             matches: Vec<(u32, u32, String, u32, String)>,
         }
         
-        impl<'a> Visit<'_> for LongFunctionVisitor<'a> {
+        impl Visit<'_> for LongFunctionVisitor {
             fn visit_item_fn(&mut self, func: &syn::ItemFn) {
                 let fn_name = func.sig.ident.to_string();
                 
@@ -1268,7 +1257,7 @@ impl PatternEngine {
             }
         }
         
-        impl<'a> LongFunctionVisitor<'a> {
+        impl LongFunctionVisitor {
             fn count_function_lines(&self, block: &syn::Block) -> u32 {
                 // Simple line counting - count non-empty, non-comment lines
                 let block_str = format!("{}", quote::quote!(#block));
@@ -1279,7 +1268,6 @@ impl PatternEngine {
         }
         
         let mut visitor = LongFunctionVisitor {
-            content,
             threshold,
             matches: Vec::new(),
         };
@@ -1507,34 +1495,7 @@ impl PatternEngine {
         visitor.matches
     }
     
-    /// Find direct mindset module access
-    fn find_direct_mindset_access(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
-        use syn::visit::Visit;
-        
-        struct MindsetAccessVisitor {
-            matches: Vec<(u32, u32, String, String)>,
-        }
-        
-        impl Visit<'_> for MindsetAccessVisitor {
-            fn visit_item_use(&mut self, use_item: &syn::ItemUse) {
-                let use_string = format!("{}", quote::quote!(#use_item));
-                
-                if use_string.contains("mindset") && !use_string.contains("domain") {
-                    let (line, col, context) = (1, 1, use_string.clone());
-                    self.matches.push((line, col, use_string, context));
-                }
-                
-                syn::visit::visit_item_use(self, use_item);
-            }
-        }
-        
-        let mut visitor = MindsetAccessVisitor {
-            matches: Vec::new(),
-        };
-        
-        visitor.visit_file(syntax_tree);
-        visitor.matches
-    }
+
     
     /// Find generics without trait bounds
     fn find_generics_without_bounds(&self, syntax_tree: &syn::File) -> Vec<(u32, u32, String, String)> {
