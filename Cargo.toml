@@ -106,3 +106,6 @@ opt-level = 1
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+# Intentionally empty to make this crate a standalone workspace root
