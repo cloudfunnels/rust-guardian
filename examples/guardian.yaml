@@ -1,0 +1,185 @@
+# Rust Guardian Configuration Example
+# Complete configuration showing all available options
+
+version: "1.0"
+
+# Path filtering configuration
+paths:
+  patterns:
+    # Exclude patterns (like .gitignore)
+    - "target/"               # Exclude target directory
+    - "**/node_modules/"      # Exclude node_modules anywhere
+    - "**/.git/"              # Exclude git directories
+    - "**/*.generated.*"      # Exclude generated files
+    - "**/dist/"              # Exclude build outputs
+    - "**/build/"             # Exclude build directories
+    - "**/*.log"              # Exclude log files
+    - "**/.DS_Store"          # Exclude macOS metadata
+    
+    # Include overrides (with !) - processed after excludes
+    - "!README.md"            # Always include README
+    - "!docs/**/*.md"         # Include all documentation
+    - "!src/core/**/*.rs"              # Always check core modules
+    - "!src/api/**/*.rs"               # Always check API modules
+    - "!src/**/*.rs"                   # Always check main source code
+    
+  # Optional: .guardianignore file support
+  ignore_file: ".guardianignore"
+
+# Pattern definitions organized by category
+patterns:
+  # Placeholder detection patterns
+  placeholders:
+    severity: error
+    enabled: true
+    rules:
+      - id: todo_comments
+        type: regex
+        pattern: '\b(TODO|FIXME|HACK|XXX|BUG|REFACTOR)\b'
+        message: "Placeholder comment detected: {match}"
+        case_sensitive: false
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/examples/**"
+            - "**/docs/**"
+      
+      - id: temporary_markers
+        type: regex
+        pattern: '(?i)\b(for now|temporary|placeholder|stub|dummy|fake)\b'
+        message: "Temporary implementation marker found: {match}"
+        case_sensitive: false
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/tests/**"
+            - "**/benches/**"
+      
+      - id: unimplemented_macros
+        type: ast
+        pattern: "macro_call:unimplemented|todo|panic"
+        message: "Unfinished macro {macro_name}! found"
+        exclude_if:
+          attribute: "#[test]"
+          in_tests: true
+
+  # Incomplete implementation detection
+  incomplete_implementations:
+    severity: error
+    enabled: true
+    rules:
+      - id: empty_ok_return
+        type: ast
+        pattern: "return_ok_unit_with_no_logic"
+        message: "Function returns Ok(()) with no meaningful implementation"
+        exclude_if:
+          attribute: "#[test]"
+          in_tests: true
+          file_patterns:
+            - "**/examples/**"
+
+  # Architectural violation detection
+  architectural_violations:
+    severity: warning
+    enabled: true
+    rules:
+      - id: hardcoded_paths
+        type: regex
+        pattern: "[\"'](/tmp/|/var/|/home/)[^\"']*[\"']"
+        message: "Hardcoded path found - use configuration instead"
+        case_sensitive: true
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/tests/**"
+            - "**/examples/**"
+            - "**/docs/**"
+      
+      - id: direct_internal_access
+        type: semantic
+        pattern: "use.*internal"
+        message: "Direct internal access may violate module boundaries"
+        severity: warning
+        exclude_if:
+          file_patterns:
+            - "**/internal/**"
+            - "**/core/**"
+            - "**/tests/**"
+
+  # Architectural compliance checking (optional)
+  architectural_compliance:
+    severity: info
+    enabled: false  # Disabled by default - enable per project
+    rules:
+      - id: architectural_header_missing
+        type: regex
+        pattern: '//!\s*.*\n(?:.*\n)*?\s*//!\s*Architecture:'
+        message: "File missing architectural principle header comment"
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/tests/**"
+            - "**/benches/**"
+            - "**/examples/**"
+            - "**/target/**"
+
+  # Code quality patterns
+  quality_issues:
+    severity: warning
+    enabled: true
+    rules:
+      - id: long_function
+        type: semantic
+        pattern: "function_lines_gt:50"
+        message: "Function is too long ({lines} lines) - consider refactoring"
+        enabled: false  # Disabled by default
+      
+      - id: deep_nesting
+        type: semantic
+        pattern: "nesting_depth_gt:4"
+        message: "Code nesting too deep ({depth} levels) - consider refactoring"
+        enabled: false  # Disabled by default
+      
+      - id: magic_numbers
+        type: regex
+        pattern: '\b\d{3,}\b'
+        message: "Magic number found: {match} - consider using a named constant"
+        enabled: false  # Disabled by default
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/tests/**"
+            - "**/benches/**"
+
+# Example project-specific customizations
+# (Uncomment and modify as needed)
+
+# custom_patterns:
+#   project_specific:
+#     severity: error
+#     enabled: true
+#     rules:
+#       - id: deprecated_api_usage
+#         type: regex
+#         pattern: 'old_function_name\('
+#         message: "Use new_function_name() instead of old_function_name()"
+#       
+#       - id: missing_error_context
+#         type: semantic
+#         pattern: "result_without_context"
+#         message: "Result should include error context using .context() or .with_context()"
+
+# Advanced configuration options
+# (These are optional and use sensible defaults)
+
+# performance:
+#   parallel_analysis: true
+#   max_file_size_mb: 10
+#   cache_enabled: true
+#   cache_ttl_hours: 24
+
+# reporting:
+#   show_context_lines: 3
+#   show_suggestions: true
+#   group_by_file: true
+#   max_violations_per_file: 10

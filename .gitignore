@@ -1,0 +1,42 @@
+# Rust build artifacts
+/target
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Coverage reports
+tarpaulin-report.html
+lcov.info
+coverage/
+
+# Benchmark results
+target/criterion/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Guardian specific
+guardian-report.*
+.rust/guardian_cache.json

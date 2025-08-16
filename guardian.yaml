@@ -1,0 +1,142 @@
+# Rust Guardian Configuration for self-assessment
+# This configuration is used by rust-guardian to check its own code quality
+
+version: "1.0"
+
+# Path filtering configuration
+paths:
+  patterns:
+    # Exclude build outputs and dependencies
+    - "target/"
+    - "**/node_modules/"
+    - "**/.git/"
+    - "**/dist/"
+    - "**/build/"
+    - "**/*.log"
+    - "**/.DS_Store"
+    
+    # Include source code for analysis
+    - "!src/**/*.rs"
+    - "!examples/**/*.rs"
+    
+  # Use the existing .guardianignore file
+  ignore_file: ".guardianignore"
+
+# Pattern definitions for rust-guardian self-assessment
+patterns:
+  # Placeholder detection patterns - more lenient for development
+  placeholders:
+    severity: warning  # Changed from error to warning for development
+    enabled: true
+    rules:
+      - id: todo_comments
+        type: regex
+        pattern: '\b(TODO|FIXME|HACK|XXX|BUG|REFACTOR)\b'
+        message: "Placeholder comment detected: {match}"
+        case_sensitive: false
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/examples/**"
+            - "**/docs/**"
+            - "**/tests/**"  # Exclude tests from TODO checking
+            - "**/config/**"  # Exclude configuration files
+      
+      - id: temporary_markers
+        type: regex
+        pattern: '(?i)\b(for now|temporary|placeholder|stub|dummy|fake)\b'
+        message: "Temporary implementation marker found: {match}"
+        case_sensitive: false
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/tests/**"
+            - "**/benches/**"
+            - "**/examples/**"  # Allow examples to have temporary markers
+            - "**/config/**"  # Exclude configuration files
+      
+      - id: unimplemented_macros
+        type: ast
+        pattern: "macro_call:unimplemented|todo|panic"
+        message: "Unfinished macro {macro_name}! found"
+        exclude_if:
+          attribute: "#[test]"
+          in_tests: true
+
+  # Incomplete implementation detection
+  incomplete_implementations:
+    severity: error
+    enabled: true
+    rules:
+      - id: empty_ok_return
+        type: ast
+        pattern: "return_ok_unit_with_no_logic"
+        message: "Function returns Ok(()) with no meaningful implementation"
+        exclude_if:
+          attribute: "#[test]"
+          in_tests: true
+          file_patterns:
+            - "**/examples/**"
+
+  # Architectural violation detection - disabled for self-assessment
+  architectural_violations:
+    severity: warning
+    enabled: false  # Disabled to focus on code quality
+    rules:
+      - id: hardcoded_paths
+        type: regex
+        pattern: "[\"'](/tmp/|/var/|/home/)[^\"']*[\"']"
+        message: "Hardcoded path found - use configuration instead"
+        case_sensitive: true
+        exclude_if:
+          in_tests: true
+          file_patterns:
+            - "**/tests/**"
+            - "**/examples/**"
+            - "**/docs/**"
+
+  # Code quality patterns - disabled for development
+  quality_issues:
+    severity: warning
+    enabled: false
+    rules:
+      - id: long_function
+        type: semantic
+        pattern: "function_lines_gt:50"
+        message: "Function is too long ({lines} lines) - consider refactoring"
+        enabled: false
+      
+      - id: deep_nesting
+        type: semantic
+        pattern: "nesting_depth_gt:4"
+        message: "Code nesting too deep ({depth} levels) - consider refactoring"
+        enabled: false
+      
+      - id: magic_numbers
+        type: regex
+        pattern: '\b\d{3,}\b'
+        message: "Magic number found: {match} - consider using a named constant"
+        enabled: false
+
+# Test pattern violations for architectural compliance
+test_patterns:
+  severity: error
+  enabled: true
+  rules:
+    - id: no_traditional_tests
+      type: regex
+      pattern: '(mod\s+tests?\s*\{|#\[test\]|#\[cfg\(test\)\])'
+      message: "Traditional unit tests found - consider integration tests for better architectural validation: {match}"
+      severity: error
+      case_sensitive: true
+      exclude_if:
+        file_patterns:
+          - "**/integration_tests/**"
+          - "**/tests/**"
+
+# Reporting configuration for CI
+reporting:
+  show_context_lines: 2
+  show_suggestions: true
+  group_by_file: true
+  max_violations_per_file: 20  # Allow more violations for comprehensive reporting
