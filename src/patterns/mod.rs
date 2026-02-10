@@ -92,7 +92,10 @@ pub struct PatternMatch {
 impl PatternEngine {
     /// Create a new pattern engine
     pub fn new() -> Self {
-        Self { regex_patterns: HashMap::new(), ast_patterns: HashMap::new() }
+        Self {
+            regex_patterns: HashMap::new(),
+            ast_patterns: HashMap::new(),
+        }
     }
 
     /// Add a pattern rule to the engine
@@ -119,7 +122,9 @@ impl PatternEngine {
                 let regex = if rule.case_sensitive {
                     Regex::new(&rule.pattern)
                 } else {
-                    RegexBuilder::new(&rule.pattern).case_insensitive(true).build()
+                    RegexBuilder::new(&rule.pattern)
+                        .case_insensitive(true)
+                        .build()
                 }
                 .map_err(|e| {
                     GuardianError::pattern(format!("Invalid regex '{}': {}", rule.pattern, e))
@@ -408,7 +413,9 @@ impl PatternEngine {
                         continue;
                     }
 
-                    let message = pattern.message_template.replace("{macro_name}", &macro_name);
+                    let message = pattern
+                        .message_template
+                        .replace("{macro_name}", &macro_name);
 
                     matches.push(PatternMatch {
                         rule_id: pattern.rule_id.clone(),
@@ -434,8 +441,9 @@ impl PatternEngine {
                         continue;
                     }
 
-                    let message =
-                        pattern.message_template.replace("{value}", &complexity.to_string());
+                    let message = pattern
+                        .message_template
+                        .replace("{value}", &complexity.to_string());
 
                     matches.push(PatternMatch {
                         rule_id: pattern.rule_id.clone(),
@@ -485,8 +493,9 @@ impl PatternEngine {
                         continue;
                     }
 
-                    let message =
-                        pattern.message_template.replace("{lines}", &line_count.to_string());
+                    let message = pattern
+                        .message_template
+                        .replace("{lines}", &line_count.to_string());
 
                     matches.push(PatternMatch {
                         rule_id: pattern.rule_id.clone(),
@@ -512,7 +521,9 @@ impl PatternEngine {
                         continue;
                     }
 
-                    let message = pattern.message_template.replace("{depth}", &depth.to_string());
+                    let message = pattern
+                        .message_template
+                        .replace("{depth}", &depth.to_string());
 
                     matches.push(PatternMatch {
                         rule_id: pattern.rule_id.clone(),
@@ -538,8 +549,9 @@ impl PatternEngine {
                         continue;
                     }
 
-                    let message =
-                        pattern.message_template.replace("{count}", &arg_count.to_string());
+                    let message = pattern
+                        .message_template
+                        .replace("{count}", &arg_count.to_string());
 
                     matches.push(PatternMatch {
                         rule_id: pattern.rule_id.clone(),
@@ -798,7 +810,9 @@ impl PatternEngine {
                         continue;
                     }
 
-                    let message = pattern.message_template.replace("{function_name}", &fn_name);
+                    let message = pattern
+                        .message_template
+                        .replace("{function_name}", &fn_name);
 
                     matches.push(PatternMatch {
                         rule_id: pattern.rule_id.clone(),
@@ -898,7 +912,10 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = MacroVisitor { target_macros, matches: Vec::new() };
+        let mut visitor = MacroVisitor {
+            target_macros,
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -959,7 +976,13 @@ impl PatternEngine {
                 if let syn::Expr::Call(call) = expr {
                     // Check if it's Ok(())
                     if let syn::Expr::Path(path) = &*call.func {
-                        if path.path.segments.last().map(|seg| seg.ident == "Ok").unwrap_or(false) {
+                        if path
+                            .path
+                            .segments
+                            .last()
+                            .map(|seg| seg.ident == "Ok")
+                            .unwrap_or(false)
+                        {
                             // Check if argument is unit type ()
                             if call.args.len() == 1 {
                                 if let syn::Expr::Tuple(tuple) = &call.args[0] {
@@ -973,7 +996,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = EmptyOkVisitor { matches: Vec::new() };
+        let mut visitor = EmptyOkVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1014,7 +1039,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = EmptyBodyVisitor { matches: Vec::new() };
+        let mut visitor = EmptyBodyVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1039,14 +1066,16 @@ impl PatternEngine {
                     "unwrap" => {
                         // unwrap() calls are always problematic
                         let (line, col, context) = (1, 1, ".unwrap()".to_string());
-                        self.matches.push((line, col, "unwrap".to_string(), context));
+                        self.matches
+                            .push((line, col, "unwrap".to_string(), context));
                     }
                     "expect" => {
                         // Check if expect() has a meaningful message
                         if method_call.args.is_empty() {
                             // expect() without any message
                             let (line, col, context) = (1, 1, ".expect()".to_string());
-                            self.matches.push((line, col, "expect".to_string(), context));
+                            self.matches
+                                .push((line, col, "expect".to_string(), context));
                         } else if let syn::Expr::Lit(syn::ExprLit {
                             lit: syn::Lit::Str(lit_str),
                             ..
@@ -1060,7 +1089,8 @@ impl PatternEngine {
                             {
                                 let (line, col, context) =
                                     (1, 1, format!(".expect(\"{}\")", message));
-                                self.matches.push((line, col, "expect".to_string(), context));
+                                self.matches
+                                    .push((line, col, "expect".to_string(), context));
                             }
                         }
                     }
@@ -1071,7 +1101,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = UnwrapVisitor { matches: Vec::new() };
+        let mut visitor = UnwrapVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1096,7 +1128,9 @@ impl PatternEngine {
                 // Convert the use statement back to string for regex matching
                 let use_string = format!(
                     "use {};",
-                    quote::quote!(#use_item).to_string().trim_start_matches("use ")
+                    quote::quote!(#use_item)
+                        .to_string()
+                        .trim_start_matches("use ")
                 );
 
                 if self.regex.is_match(&use_string) {
@@ -1111,7 +1145,10 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = ImportVisitor { regex, matches: Vec::new() };
+        let mut visitor = ImportVisitor {
+            regex,
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1137,8 +1174,10 @@ impl PatternEngine {
         }
 
         // Extract context line
-        let line_end =
-            content[line_start..].find('\n').map(|pos| line_start + pos).unwrap_or(content.len());
+        let line_end = content[line_start..]
+            .find('\n')
+            .map(|pos| line_start + pos)
+            .unwrap_or(content.len());
 
         let context = content[line_start..line_end].trim().to_string();
 
@@ -1222,7 +1261,11 @@ impl PatternEngine {
     /// Check if a file path indicates it's a test file
     fn is_test_file(&self, file_path: &Path) -> bool {
         file_path.components().any(|component| {
-            component.as_os_str().to_str().map(|s| s == "tests" || s == "test").unwrap_or(false)
+            component
+                .as_os_str()
+                .to_str()
+                .map(|s| s == "tests" || s == "test")
+                .unwrap_or(false)
         }) || file_path
             .file_name()
             .and_then(|name| name.to_str())
@@ -1307,7 +1350,10 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = ComplexityVisitor { threshold, matches: Vec::new() };
+        let mut visitor = ComplexityVisitor {
+            threshold,
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1328,7 +1374,8 @@ impl PatternEngine {
                 {
                     let fn_name = func.sig.ident.to_string();
                     let (line, col, context) = (1, 1, format!("pub fn {}", fn_name));
-                    self.matches.push((line, col, format!("fn {}", fn_name), context));
+                    self.matches
+                        .push((line, col, format!("fn {}", fn_name), context));
                 }
                 syn::visit::visit_item_fn(self, func);
             }
@@ -1339,7 +1386,8 @@ impl PatternEngine {
                 {
                     let struct_name = item_struct.ident.to_string();
                     let (line, col, context) = (1, 1, format!("pub struct {}", struct_name));
-                    self.matches.push((line, col, format!("struct {}", struct_name), context));
+                    self.matches
+                        .push((line, col, format!("struct {}", struct_name), context));
                 }
                 syn::visit::visit_item_struct(self, item_struct);
             }
@@ -1350,7 +1398,8 @@ impl PatternEngine {
                 {
                     let enum_name = item_enum.ident.to_string();
                     let (line, col, context) = (1, 1, format!("pub enum {}", enum_name));
-                    self.matches.push((line, col, format!("enum {}", enum_name), context));
+                    self.matches
+                        .push((line, col, format!("enum {}", enum_name), context));
                 }
                 syn::visit::visit_item_enum(self, item_enum);
             }
@@ -1361,7 +1410,8 @@ impl PatternEngine {
                 {
                     let trait_name = item_trait.ident.to_string();
                     let (line, col, context) = (1, 1, format!("pub trait {}", trait_name));
-                    self.matches.push((line, col, format!("trait {}", trait_name), context));
+                    self.matches
+                        .push((line, col, format!("trait {}", trait_name), context));
                 }
                 syn::visit::visit_item_trait(self, item_trait);
             }
@@ -1383,7 +1433,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = PublicDocsVisitor { matches: Vec::new() };
+        let mut visitor = PublicDocsVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1431,7 +1483,10 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = LongFunctionVisitor { threshold, matches: Vec::new() };
+        let mut visitor = LongFunctionVisitor {
+            threshold,
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1456,8 +1511,11 @@ impl PatternEngine {
                 self.current_depth += 1;
 
                 if self.current_depth > self.threshold {
-                    let (line, col, context) =
-                        (1, 1, format!("nested block at depth {}", self.current_depth));
+                    let (line, col, context) = (
+                        1,
+                        1,
+                        format!("nested block at depth {}", self.current_depth),
+                    );
                     self.matches.push((line, col, self.current_depth, context));
                 }
 
@@ -1469,8 +1527,11 @@ impl PatternEngine {
                 self.current_depth += 1;
 
                 if self.current_depth > self.threshold {
-                    let (line, col, context) =
-                        (1, 1, format!("if statement at depth {}", self.current_depth));
+                    let (line, col, context) = (
+                        1,
+                        1,
+                        format!("if statement at depth {}", self.current_depth),
+                    );
                     self.matches.push((line, col, self.current_depth, context));
                 }
 
@@ -1482,8 +1543,11 @@ impl PatternEngine {
                 self.current_depth += 1;
 
                 if self.current_depth > self.threshold {
-                    let (line, col, context) =
-                        (1, 1, format!("match statement at depth {}", self.current_depth));
+                    let (line, col, context) = (
+                        1,
+                        1,
+                        format!("match statement at depth {}", self.current_depth),
+                    );
                     self.matches.push((line, col, self.current_depth, context));
                 }
 
@@ -1492,7 +1556,11 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = NestingVisitor { threshold, current_depth: 0, matches: Vec::new() };
+        let mut visitor = NestingVisitor {
+            threshold,
+            current_depth: 0,
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1526,7 +1594,10 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = ManyArgsVisitor { threshold, matches: Vec::new() };
+        let mut visitor = ManyArgsVisitor {
+            threshold,
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1597,7 +1668,10 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = BlockingInAsyncVisitor { in_async_fn: false, matches: Vec::new() };
+        let mut visitor = BlockingInAsyncVisitor {
+            in_async_fn: false,
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1624,7 +1698,8 @@ impl PatternEngine {
                                 .contains(&fn_name.as_str())
                         {
                             let (line, col, context) = (1, 1, format!("{}() not awaited", fn_name));
-                            self.matches.push((line, col, format!("{}()", fn_name), context));
+                            self.matches
+                                .push((line, col, format!("{}()", fn_name), context));
                         }
                     }
                 }
@@ -1633,7 +1708,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = FutureNotAwaitedVisitor { matches: Vec::new() };
+        let mut visitor = FutureNotAwaitedVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1664,7 +1741,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = SelectVisitor { matches: Vec::new() };
+        let mut visitor = SelectVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1701,8 +1780,11 @@ impl PatternEngine {
                     if let syn::GenericParam::Type(type_param) = param {
                         if type_param.bounds.is_empty() {
                             let generic_name = type_param.ident.to_string();
-                            let (line, col, context) =
-                                (1, 1, format!("struct {}<{}>", item_struct.ident, generic_name));
+                            let (line, col, context) = (
+                                1,
+                                1,
+                                format!("struct {}<{}>", item_struct.ident, generic_name),
+                            );
                             self.matches.push((line, col, generic_name, context));
                         }
                     }
@@ -1712,7 +1794,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = GenericBoundsVisitor { matches: Vec::new() };
+        let mut visitor = GenericBoundsVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1786,7 +1870,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = TestAssertionVisitor { matches: Vec::new() };
+        let mut visitor = TestAssertionVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1822,7 +1908,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = ImplTraitVisitor { matches: Vec::new() };
+        let mut visitor = ImplTraitVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1855,7 +1943,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = UnsafeVisitor { matches: Vec::new() };
+        let mut visitor = UnsafeVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1885,7 +1975,9 @@ impl PatternEngine {
             }
         }
 
-        let mut visitor = IgnoredTestVisitor { matches: Vec::new() };
+        let mut visitor = IgnoredTestVisitor {
+            matches: Vec::new(),
+        };
 
         visitor.visit_file(syntax_tree);
         visitor.matches
@@ -1991,8 +2083,8 @@ pub mod validation {
     }
 
     /// Validate exclude conditions functionality - designed for integration testing
-    pub fn validate_exclude_conditions_functionality()
-    -> crate::domain::violations::GuardianResult<()> {
+    pub fn validate_exclude_conditions_functionality(
+    ) -> crate::domain::violations::GuardianResult<()> {
         let mut engine = PatternEngine::new();
 
         let rule = PatternRule {

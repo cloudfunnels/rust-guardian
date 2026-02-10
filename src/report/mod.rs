@@ -171,12 +171,16 @@ impl ReportOptions {
                 show_suggestions: false,
                 ..Self::default()
             },
-            OutputFormat::Junit => {
-                Self { use_colors: false, show_suggestions: false, ..Self::default() }
-            }
-            OutputFormat::GitHub => {
-                Self { use_colors: false, show_suggestions: false, ..Self::default() }
-            }
+            OutputFormat::Junit => Self {
+                use_colors: false,
+                show_suggestions: false,
+                ..Self::default()
+            },
+            OutputFormat::GitHub => Self {
+                use_colors: false,
+                show_suggestions: false,
+                ..Self::default()
+            },
             OutputFormat::Agent => Self {
                 use_colors: false,
                 show_context: false,
@@ -336,7 +340,11 @@ impl ReportFormatter {
             ));
         }
 
-        if json.get("runs").and_then(|r| r.as_array()).is_none_or(|arr| arr.is_empty()) {
+        if json
+            .get("runs")
+            .and_then(|r| r.as_array())
+            .is_none_or(|arr| arr.is_empty())
+        {
             return Err(crate::domain::violations::GuardianError::config(
                 "SARIF output must contain at least one run",
             ));
@@ -443,7 +451,10 @@ impl ReportFormatter {
                 std::collections::BTreeMap::new();
 
             for violation in violations {
-                by_file.entry(&violation.file_path).or_default().push(violation);
+                by_file
+                    .entry(&violation.file_path)
+                    .or_default()
+                    .push(violation);
             }
 
             // Display each file's violations
@@ -572,7 +583,10 @@ impl ReportFormatter {
         xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
 
         let total_tests = violations.len();
-        let failures = violations.iter().filter(|v| v.severity == Severity::Error).count();
+        let failures = violations
+            .iter()
+            .filter(|v| v.severity == Severity::Error)
+            .count();
         let errors = 0; // Currently using failures count for both failures and errors
         let execution_time = (report.summary.execution_time_ms as f64) / 1000.0;
 
@@ -695,8 +709,11 @@ impl ReportFormatter {
                 _ => String::new(),
             };
 
-            let position_part =
-                if position.is_empty() { String::new() } else { format!(" {position}") };
+            let position_part = if position.is_empty() {
+                String::new()
+            } else {
+                format!(" {position}")
+            };
 
             output.push_str(&format!(
                 "::{} file={},title={}{}::{}\n",
@@ -723,7 +740,10 @@ impl ReportFormatter {
             let line_number = violation.line_number.unwrap_or(1);
             let path = violation.file_path.display();
 
-            output.push_str(&format!("[{}:{}]\n{}\n\n", line_number, path, violation.message));
+            output.push_str(&format!(
+                "[{}:{}]\n{}\n\n",
+                line_number, path, violation.message
+            ));
         }
 
         Ok(output)
@@ -761,7 +781,11 @@ impl ReportFormatter {
                 let text = format!(
                     "{} error{}",
                     report.summary.violations_by_severity.error,
-                    if report.summary.violations_by_severity.error == 1 { "" } else { "s" }
+                    if report.summary.violations_by_severity.error == 1 {
+                        ""
+                    } else {
+                        "s"
+                    }
                 );
                 if self.options.use_colors {
                     parts.push(format!("\x1b[31m{text}\x1b[0m"));
@@ -774,7 +798,11 @@ impl ReportFormatter {
                 let text = format!(
                     "{} warning{}",
                     report.summary.violations_by_severity.warning,
-                    if report.summary.violations_by_severity.warning == 1 { "" } else { "s" }
+                    if report.summary.violations_by_severity.warning == 1 {
+                        ""
+                    } else {
+                        "s"
+                    }
                 );
                 if self.options.use_colors {
                     parts.push(format!("\x1b[33m{text}\x1b[0m"));
@@ -848,7 +876,10 @@ mod tests {
 
     #[test]
     fn test_human_format() {
-        let options = ReportOptions { use_colors: false, ..Default::default() };
+        let options = ReportOptions {
+            use_colors: false,
+            ..Default::default()
+        };
 
         // Demonstrate self-validation
         options.validate().expect("Test options should be valid");
@@ -887,7 +918,13 @@ mod tests {
         let json: JsonValue =
             serde_json::from_str(&output).expect("JSON output should be valid JSON");
         assert!(json["violations"].is_array());
-        assert_eq!(json["violations"].as_array().expect("violations should be an array").len(), 1);
+        assert_eq!(
+            json["violations"]
+                .as_array()
+                .expect("violations should be an array")
+                .len(),
+            1
+        );
         assert_eq!(json["violations"][0]["rule_id"], "test_rule");
         assert_eq!(json["summary"]["total_files"], 10);
     }
@@ -932,7 +969,10 @@ mod tests {
 
     #[test]
     fn test_empty_report() {
-        let options = ReportOptions { use_colors: false, ..Default::default() };
+        let options = ReportOptions {
+            use_colors: false,
+            ..Default::default()
+        };
 
         // Demonstrate self-validation
         options.validate().expect("Test options should be valid");
@@ -954,10 +994,15 @@ mod tests {
 
     #[test]
     fn test_severity_filtering() {
-        let options = ReportOptions { min_severity: Some(Severity::Error), ..Default::default() };
+        let options = ReportOptions {
+            min_severity: Some(Severity::Error),
+            ..Default::default()
+        };
 
         // Demonstrate self-validation of filtering options
-        options.validate().expect("Severity filtering options should be valid");
+        options
+            .validate()
+            .expect("Severity filtering options should be valid");
 
         let formatter = ReportFormatter::with_options(options);
 
@@ -989,7 +1034,10 @@ mod tests {
 
         // Should only include the error, not the warning
         assert_eq!(
-            json["violations"].as_array().expect("filtered violations should be an array").len(),
+            json["violations"]
+                .as_array()
+                .expect("filtered violations should be an array")
+                .len(),
             1
         );
         assert_eq!(json["violations"][0]["rule_id"], "error_rule");

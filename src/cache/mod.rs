@@ -362,7 +362,12 @@ impl FileCache {
 impl Default for CacheMetadata {
     fn default() -> Self {
         let now = current_timestamp();
-        Self { created_at: now, updated_at: now, hits: 0, misses: 0 }
+        Self {
+            created_at: now,
+            updated_at: now,
+            hits: 0,
+            misses: 0,
+        }
     }
 }
 

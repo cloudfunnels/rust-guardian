@@ -181,7 +181,10 @@ impl ValidationReport {
     pub fn new() -> Self {
         Self {
             violations: Vec::new(),
-            summary: ValidationSummary { validated_at: Utc::now(), ..Default::default() },
+            summary: ValidationSummary {
+                validated_at: Utc::now(),
+                ..Default::default()
+            },
             config_fingerprint: None,
         }
     }
@@ -204,7 +207,9 @@ impl ValidationReport {
 
     /// Get violations of a specific severity
     pub fn violations_by_severity(&self, severity: Severity) -> impl Iterator<Item = &Violation> {
-        self.violations.iter().filter(move |v| v.severity == severity)
+        self.violations
+            .iter()
+            .filter(move |v| v.severity == severity)
     }
 
     /// Set the number of files analyzed
@@ -281,27 +286,38 @@ pub enum GuardianError {
 impl GuardianError {
     /// Create a configuration error
     pub fn config(message: impl Into<String>) -> Self {
-        Self::Configuration { message: message.into() }
+        Self::Configuration {
+            message: message.into(),
+        }
     }
 
     /// Create a pattern error
     pub fn pattern(message: impl Into<String>) -> Self {
-        Self::Pattern { message: message.into() }
+        Self::Pattern {
+            message: message.into(),
+        }
     }
 
     /// Create an analysis error
     pub fn analysis(file: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::Analysis { file: file.into(), message: message.into() }
+        Self::Analysis {
+            file: file.into(),
+            message: message.into(),
+        }
     }
 
     /// Create a cache error
     pub fn cache(message: impl Into<String>) -> Self {
-        Self::Cache { message: message.into() }
+        Self::Cache {
+            message: message.into(),
+        }
     }
 
     /// Create a validation error
     pub fn validation(message: impl Into<String>) -> Self {
-        Self::Validation { message: message.into() }
+        Self::Validation {
+            message: message.into(),
+        }
     }
 }
 
@@ -342,7 +358,10 @@ mod tests {
 
         assert_eq!(violation.line_number, Some(42));
         assert_eq!(violation.column_number, Some(15));
-        assert_eq!(violation.context, Some("let x = unimplemented!();".to_string()));
+        assert_eq!(
+            violation.context,
+            Some("let x = unimplemented!();".to_string())
+        );
         assert!(!violation.is_blocking());
     }
 
