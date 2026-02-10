@@ -189,7 +189,25 @@ impl PathFilter {
         let root = root.as_ref();
         let mut files = Vec::new();
 
-        for entry in WalkDir::new(root).follow_links(false).into_iter().filter_map(|e| e.ok()) {
+        // OPTIMIZATION: Use filter_entry to skip massive directories BEFORE entering them
+        let walker = WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            
+            // SKIP common massive directories to prevent IO floods
+            if name == ".git" 
+                || name == "target" 
+                || name == "node_modules" 
+                || name == ".venv"
+                || name == "venv"
+                || name == ".idea"
+                || name == ".vscode"
+            {
+                return false;
+            }
+            true
+        });
+
+        for entry in walker.filter_map(|e| e.ok()) {
             let path = entry.path();
 
             // Only process files, not directories
