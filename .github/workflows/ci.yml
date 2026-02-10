@@ -114,7 +114,9 @@ jobs:
       uses: dtolnay/rust-toolchain@nightly
     
     - name: Install minimal-versions
-      run: cargo install cargo-minimal-versions
+      run: |
+        cargo install cargo-minimal-versions
+        cargo install cargo-hack
     
     - name: Check minimal versions
       run: cargo minimal-versions check

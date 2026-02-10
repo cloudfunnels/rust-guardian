@@ -246,9 +246,18 @@ impl ReportFormatter {
 
     /// Check if the current environment supports ANSI color codes
     fn supports_ansi_colors() -> bool {
-        // Basic heuristic - in production this would check terminal capabilities
-        std::env::var("NO_COLOR").is_err()
-            && (std::env::var("TERM").is_ok_and(|term| term != "dumb"))
+        // Check if colors are explicitly disabled
+        if std::env::var("NO_COLOR").is_ok() {
+            return false;
+        }
+
+        // GitHub Actions and other CI systems support ANSI colors
+        if std::env::var("GITHUB_ACTIONS").is_ok() || std::env::var("CI").is_ok() {
+            return true;
+        }
+
+        // Check terminal capabilities
+        std::env::var("TERM").is_ok_and(|term| term != "dumb")
     }
 
     /// Validate that a format operation produces expected structure
