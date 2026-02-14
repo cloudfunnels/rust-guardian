@@ -17,7 +17,6 @@ Rust Guardian is a self-contained, production-ready crate for comprehensive code
 - **📊 Multiple Output Formats**: Human, JSON, JUnit, SARIF, GitHub Actions
 - **⚙️ Flexible Configuration**: YAML-based pattern customization
 - **🔄 Watch Mode**: Real-time validation during development
-- **🎯 Zero Dependencies**: Self-contained with no external crate dependencies
 
 ## Quick Start
 

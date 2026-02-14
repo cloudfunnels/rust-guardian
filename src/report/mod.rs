@@ -673,7 +673,7 @@ impl ReportFormatter {
                 "tool": {
                     "driver": {
                         "name": "rust-guardian",
-                        "version": "0.1.0",
+                        "version": "0.1.1,
                         "informationUri": "https://github.com/cloudfunnels/rust-guardian"
                     }
                 },
