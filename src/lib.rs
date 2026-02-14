@@ -70,7 +70,11 @@ impl GuardianValidator {
         let analyzer = Analyzer::new(config)?;
         let report_formatter = ReportFormatter::default();
 
-        Ok(Self { analyzer, cache: None, report_formatter })
+        Ok(Self {
+            analyzer,
+            cache: None,
+            report_formatter,
+        })
     }
 
     /// Create a validator with default configuration
@@ -104,7 +108,8 @@ impl GuardianValidator {
         &mut self,
         paths: Vec<P>,
     ) -> GuardianResult<ValidationReport> {
-        self.validate_with_options(paths, &ValidationOptions::default()).await
+        self.validate_with_options(paths, &ValidationOptions::default())
+            .await
     }
 
     /// Validate files with custom options
@@ -118,7 +123,8 @@ impl GuardianValidator {
 
         // Use cache-aware analysis if enabled
         let report = if options.use_cache && self.cache.is_some() {
-            self.analyze_with_cache(&paths, &options.analysis_options).await?
+            self.analyze_with_cache(&paths, &options.analysis_options)
+                .await?
         } else {
             self.analyzer.analyze_paths(
                 &paths.iter().map(|p| p.as_path()).collect::<Vec<_>>(),
@@ -188,7 +194,11 @@ impl GuardianValidator {
 
     /// Cleanup cache by removing entries for non-existent files
     pub fn cleanup_cache(&mut self) -> GuardianResult<Option<usize>> {
-        if let Some(cache) = &mut self.cache { Ok(Some(cache.cleanup()?)) } else { Ok(None) }
+        if let Some(cache) = &mut self.cache {
+            Ok(Some(cache.cleanup()?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Cache-aware analysis that skips files that haven't changed
@@ -213,8 +223,11 @@ impl GuardianValidator {
                 // For directories, just analyze normally to discover files
                 let temp_report = self.analyzer.analyze_directory(path, options)?;
                 // Extract unique file paths from violations
-                let discovered_files: std::collections::HashSet<PathBuf> =
-                    temp_report.violations.iter().map(|v| v.file_path.clone()).collect();
+                let discovered_files: std::collections::HashSet<PathBuf> = temp_report
+                    .violations
+                    .iter()
+                    .map(|v| v.file_path.clone())
+                    .collect();
                 all_files.extend(discovered_files);
             }
         }
@@ -247,7 +260,10 @@ impl GuardianValidator {
             // Analyze only files that need it
             if !files_to_analyze.is_empty() {
                 let fresh_report = self.analyzer.analyze_paths(
-                    &files_to_analyze.iter().map(|p| p.as_path()).collect::<Vec<_>>(),
+                    &files_to_analyze
+                        .iter()
+                        .map(|p| p.as_path())
+                        .collect::<Vec<_>>(),
                     options,
                 )?;
 
@@ -256,8 +272,10 @@ impl GuardianValidator {
 
                 // Update cache with new results
                 for file_path in &files_to_analyze {
-                    let file_violations: Vec<_> =
-                        all_violations.iter().filter(|v| v.file_path == *file_path).collect();
+                    let file_violations: Vec<_> = all_violations
+                        .iter()
+                        .filter(|v| v.file_path == *file_path)
+                        .collect();
 
                     if let Err(e) =
                         cache.update_entry(file_path, file_violations.len(), &config_fingerprint)
@@ -452,7 +470,9 @@ mod tests {
         fs::write(root.join("src/main.rs"), "fn main() {}").unwrap();
 
         let validator = GuardianValidator::new().unwrap();
-        let report = validator.validate_directory(root, &AnalysisOptions::default()).unwrap();
+        let report = validator
+            .validate_directory(root, &AnalysisOptions::default())
+            .unwrap();
 
         assert!(report.has_violations());
         assert!(report.summary.total_files > 0);
@@ -469,10 +489,14 @@ mod tests {
         let report = validator.validate_file(&test_file).unwrap();
 
         // Test different formats
-        let human = validator.format_report(&report, OutputFormat::Human).unwrap();
+        let human = validator
+            .format_report(&report, OutputFormat::Human)
+            .unwrap();
         assert!(human.contains("Code Quality Violations Found"));
 
-        let json = validator.format_report(&report, OutputFormat::Json).unwrap();
+        let json = validator
+            .format_report(&report, OutputFormat::Json)
+            .unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(parsed["violations"].is_array());
     }

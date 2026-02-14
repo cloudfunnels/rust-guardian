@@ -73,12 +73,14 @@ impl Analyzer {
                 }
 
                 let effective_severity = config.effective_severity(category, rule);
-                pattern_engine.add_rule(rule, effective_severity).map_err(|e| {
-                    GuardianError::config(format!(
-                        "Failed to add rule '{}' in category '{}': {}",
-                        rule.id, category_name, e
-                    ))
-                })?;
+                pattern_engine
+                    .add_rule(rule, effective_severity)
+                    .map_err(|e| {
+                        GuardianError::config(format!(
+                            "Failed to add rule '{}' in category '{}': {}",
+                            rule.id, category_name, e
+                        ))
+                    })?;
             }
         }
 
@@ -92,7 +94,12 @@ impl Analyzer {
         let path_filter = PathFilter::new(config.paths.patterns.clone(), ignore_file)
             .map_err(|e| GuardianError::config(format!("Failed to create path filter: {e}")))?;
 
-        Ok(Self { config, pattern_engine, path_filter, rust_analyzer: RustAnalyzer::new() })
+        Ok(Self {
+            config,
+            pattern_engine,
+            path_filter,
+            rust_analyzer: RustAnalyzer::new(),
+        })
     }
 
     /// Create an analyzer with default configuration
@@ -120,23 +127,29 @@ impl Analyzer {
         let mut all_violations = Vec::new();
 
         // Apply pattern matching
-        let matches = self.pattern_engine.analyze_file(file_path, &content).map_err(|e| {
-            GuardianError::analysis(
-                file_path.display().to_string(),
-                format!("Pattern analysis failed: {e}"),
-            )
-        })?;
+        let matches = self
+            .pattern_engine
+            .analyze_file(file_path, &content)
+            .map_err(|e| {
+                GuardianError::analysis(
+                    file_path.display().to_string(),
+                    format!("Pattern analysis failed: {e}"),
+                )
+            })?;
 
         all_violations.extend(self.pattern_engine.matches_to_violations(matches));
 
         // Apply Rust-specific analysis for .rs files
         if self.rust_analyzer.handles_file(file_path) {
-            let rust_violations = self.rust_analyzer.analyze(file_path, &content).map_err(|e| {
-                GuardianError::analysis(
-                    file_path.display().to_string(),
-                    format!("Rust analysis failed: {e}"),
-                )
-            })?;
+            let rust_violations = self
+                .rust_analyzer
+                .analyze(file_path, &content)
+                .map_err(|e| {
+                    GuardianError::analysis(
+                        file_path.display().to_string(),
+                        format!("Rust analysis failed: {e}"),
+                    )
+                })?;
             all_violations.extend(rust_violations);
         }
 
@@ -238,18 +251,20 @@ impl Analyzer {
         let violations = Arc::new(Mutex::new(Vec::new()));
         let errors = Arc::new(Mutex::new(Vec::new()));
 
-        files.par_iter().for_each(|file_path| match self.analyze_file(file_path) {
-            Ok(file_violations) => {
-                if let Ok(mut v) = violations.lock() {
-                    v.extend(file_violations);
+        files
+            .par_iter()
+            .for_each(|file_path| match self.analyze_file(file_path) {
+                Ok(file_violations) => {
+                    if let Ok(mut v) = violations.lock() {
+                        v.extend(file_violations);
+                    }
                 }
-            }
-            Err(e) => {
-                if let Ok(mut errs) = errors.lock() {
-                    errs.push((file_path.clone(), e));
+                Err(e) => {
+                    if let Ok(mut errs) = errors.lock() {
+                        errs.push((file_path.clone(), e));
+                    }
                 }
-            }
-        });
+            });
 
         // Handle errors
         let errors = Arc::try_unwrap(errors)
@@ -548,14 +563,20 @@ impl Analyzer {
         })?;
 
         // Test max_files limitation
-        let options = AnalysisOptions { max_files: Some(1), ..Default::default() };
+        let options = AnalysisOptions {
+            max_files: Some(1),
+            ..Default::default()
+        };
 
         let report = self.analyze_directory(root, &options)?;
 
         if report.summary.total_files != 1 {
             return Err(GuardianError::analysis(
                 "validation".to_string(),
-                format!("Expected 1 file with max_files=1, got {}", report.summary.total_files),
+                format!(
+                    "Expected 1 file with max_files=1, got {}",
+                    report.summary.total_files
+                ),
             ));
         }
 

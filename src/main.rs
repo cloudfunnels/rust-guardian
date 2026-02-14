@@ -246,13 +246,18 @@ async fn run_command(cli: Cli) -> GuardianResult<i32> {
             )
             .await
         }
-        Commands::Watch { path, pattern, delay } => run_watch(path, pattern, delay).await,
+        Commands::Watch {
+            path,
+            pattern,
+            delay,
+        } => run_watch(path, pattern, delay).await,
         Commands::ValidateConfig { config_file } => run_validate_config(config_file.or(cli.config)),
         Commands::Explain { rule_id } => run_explain(rule_id),
         Commands::Cache { action } => run_cache_command(action).await,
-        Commands::Rules { enabled_only, category } => {
-            run_list_rules(cli.config, enabled_only, category)
-        }
+        Commands::Rules {
+            enabled_only,
+            category,
+        } => run_list_rules(cli.config, enabled_only, category),
     }
 }
 
@@ -300,7 +305,11 @@ async fn run_check(
     }
 
     // Use current directory if no paths specified
-    let paths = if paths.is_empty() { vec![PathBuf::from(".")] } else { paths };
+    let paths = if paths.is_empty() {
+        vec![PathBuf::from(".")]
+    } else {
+        paths
+    };
 
     // Set up validation options
     let validation_options = ValidationOptions {
@@ -323,7 +332,9 @@ async fn run_check(
     };
 
     // Run validation
-    let report = validator.validate_with_options(paths, &validation_options).await?;
+    let report = validator
+        .validate_with_options(paths, &validation_options)
+        .await?;
 
     // Format and output results
     let formatted = validator.format_report(&report, format.into())?;
@@ -368,7 +379,11 @@ async fn run_watch(
     println!("📂 Watching: {}", watch_path.display());
 
     // Set up file patterns to watch (default to Rust files if none specified)
-    let watch_patterns = if patterns.is_empty() { vec!["**/*.rs".to_string()] } else { patterns };
+    let watch_patterns = if patterns.is_empty() {
+        vec!["**/*.rs".to_string()]
+    } else {
+        patterns
+    };
 
     println!("🎯 Patterns: {}", watch_patterns.join(", "));
     println!("⏱️  Debounce delay: {delay_ms}ms");
@@ -389,9 +404,15 @@ async fn run_watch(
     .map_err(|e| GuardianError::config(format!("Failed to create file watcher: {e}")))?;
 
     // Start watching the path
-    watcher.watch(&watch_path, RecursiveMode::Recursive).map_err(|e| {
-        GuardianError::config(format!("Failed to watch path '{}': {}", watch_path.display(), e))
-    })?;
+    watcher
+        .watch(&watch_path, RecursiveMode::Recursive)
+        .map_err(|e| {
+            GuardianError::config(format!(
+                "Failed to watch path '{}': {}",
+                watch_path.display(),
+                e
+            ))
+        })?;
 
     // Track last run to implement debouncing
     let mut last_run = std::time::Instant::now();
@@ -526,7 +547,11 @@ async fn run_watch_analysis_with_config(
                 config
             }
             Err(e) => {
-                eprintln!("⚠️  Failed to reload config from {}: {}", config_path.display(), e);
+                eprintln!(
+                    "⚠️  Failed to reload config from {}: {}",
+                    config_path.display(),
+                    e
+                );
                 eprintln!("   Using default configuration instead...");
                 GuardianConfig::default()
             }
@@ -575,7 +600,10 @@ async fn run_watch_analysis_with_config(
     };
 
     // Run validation
-    match validator.validate_with_options(vec![watch_path], &validation_options).await {
+    match validator
+        .validate_with_options(vec![watch_path], &validation_options)
+        .await
+    {
         Ok(report) => {
             if report.has_violations() {
                 let formatted = validator.format_report(&report, OutputFormat::Human)?;
@@ -670,7 +698,10 @@ fn run_explain(rule_id: String) -> GuardianResult<i32> {
             if rule.id == rule_id {
                 println!("📖 Rule: {}", rule.id);
                 println!("📂 Category: {category_name}");
-                println!("⚠️ Severity: {:?}", rule.severity.unwrap_or(category.severity));
+                println!(
+                    "⚠️ Severity: {:?}",
+                    rule.severity.unwrap_or(category.severity)
+                );
                 println!("🔍 Type: {:?}", rule.rule_type);
                 println!("✅ Enabled: {}", rule.enabled);
                 println!();
@@ -805,7 +836,12 @@ fn run_list_rules(
         }
 
         let status = if category.enabled { "✅" } else { "❌" };
-        println!("{}📂 {} ({})", status, category_name, category.severity.as_str());
+        println!(
+            "{}📂 {} ({})",
+            status,
+            category_name,
+            category.severity.as_str()
+        );
 
         for rule in &category.rules {
             // Skip disabled rules if enabled_only is true
@@ -816,7 +852,13 @@ fn run_list_rules(
             let rule_status = if rule.enabled { "✅" } else { "❌" };
             let severity = rule.severity.unwrap_or(category.severity);
 
-            println!("  {}🔍 {} [{}] - {}", rule_status, rule.id, severity.as_str(), rule.message);
+            println!(
+                "  {}🔍 {} [{}] - {}",
+                rule_status,
+                rule.id,
+                severity.as_str(),
+                rule.message
+            );
         }
         println!();
     }
@@ -825,15 +867,25 @@ fn run_list_rules(
 }
 
 fn init_logging(verbose: bool) {
-    let level = if verbose { tracing::Level::DEBUG } else { tracing::Level::WARN };
+    let level = if verbose {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::WARN
+    };
 
-    tracing_subscriber::fmt().with_max_level(level).with_target(false).init();
+    tracing_subscriber::fmt()
+        .with_max_level(level)
+        .with_target(false)
+        .init();
 }
 
 fn format_timestamp(timestamp: u64) -> String {
     use chrono::{TimeZone, Utc};
 
-    let dt = Utc.timestamp_opt(timestamp as i64, 0).single().unwrap_or_else(Utc::now);
+    let dt = Utc
+        .timestamp_opt(timestamp as i64, 0)
+        .single()
+        .unwrap_or_else(Utc::now);
 
     dt.format("%Y-%m-%d %H:%M:%S UTC").to_string()
 }
@@ -851,9 +903,15 @@ mod tests {
 
         fs::write(&test_file, "// TODO: implement this\nfn main() {}").unwrap();
 
-        // Test basic check
+        // Create a test config that will detect TODO comments
+        let config_file = temp_dir.path().join("test_config.yaml");
+        let config = GuardianConfig::default();
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        fs::write(&config_file, yaml).unwrap();
+
+        // Test basic check with explicit config
         let result = run_check(
-            None,
+            Some(config_file),
             vec![test_file],
             OutputFormatArg::Json,
             None,

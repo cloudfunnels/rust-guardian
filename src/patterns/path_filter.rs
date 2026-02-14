@@ -48,7 +48,11 @@ impl PathFilter {
                 GuardianError::pattern(format!("Invalid pattern '{pattern_str}': {e}"))
             })?;
 
-            filter_patterns.push(FilterPattern { pattern, is_include, original: pattern_str });
+            filter_patterns.push(FilterPattern {
+                pattern,
+                is_include,
+                original: pattern_str,
+            });
         }
 
         Ok(Self {
@@ -167,7 +171,11 @@ impl PathFilter {
 
             match glob::Pattern::new(&pattern_str) {
                 Ok(pattern) => {
-                    patterns.push(FilterPattern { pattern, is_include, original: pattern_str });
+                    patterns.push(FilterPattern {
+                        pattern,
+                        is_include,
+                        original: pattern_str,
+                    });
                 }
                 Err(e) => {
                     // Log warning but don't fail - just skip invalid patterns
@@ -190,22 +198,25 @@ impl PathFilter {
         let mut files = Vec::new();
 
         // OPTIMIZATION: Use filter_entry to skip massive directories BEFORE entering them
-        let walker = WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| {
-            let name = e.file_name().to_string_lossy();
-            
-            // SKIP common massive directories to prevent IO floods
-            if name == ".git" 
-                || name == "target" 
-                || name == "node_modules" 
-                || name == ".venv"
-                || name == "venv"
-                || name == ".idea"
-                || name == ".vscode"
-            {
-                return false;
-            }
-            true
-        });
+        let walker = WalkDir::new(root)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|e| {
+                let name = e.file_name().to_string_lossy();
+
+                // SKIP common massive directories to prevent IO floods
+                if name == ".git"
+                    || name == "target"
+                    || name == "node_modules"
+                    || name == ".venv"
+                    || name == "venv"
+                    || name == ".idea"
+                    || name == ".vscode"
+                {
+                    return false;
+                }
+                true
+            });
 
         for entry in walker.filter_map(|e| e.ok()) {
             let path = entry.path();
@@ -285,12 +296,17 @@ impl PathFilter {
             }
             // Remove trailing slash and match
             let dir_pattern = pattern.original.trim_end_matches('/');
-            return glob::Pattern::new(dir_pattern).map(|p| p.matches(&path_str)).unwrap_or(false);
+            return glob::Pattern::new(dir_pattern)
+                .map(|p| p.matches(&path_str))
+                .unwrap_or(false);
         }
 
         if pattern.original.starts_with('/') {
             // Absolute pattern from root - remove leading slash and match from beginning
-            let absolute_pattern = pattern.original.strip_prefix('/').unwrap_or(&pattern.original);
+            let absolute_pattern = pattern
+                .original
+                .strip_prefix('/')
+                .unwrap_or(&pattern.original);
             return glob::Pattern::new(absolute_pattern)
                 .map(|p| p.matches(&path_str))
                 .unwrap_or(false);
@@ -417,7 +433,10 @@ pub mod validation {
         fs::create_dir_all(root.join("tests"))?;
 
         // Create .guardianignore file
-        fs::write(root.join(".guardianignore"), "*.tmp\ntests/**\n!tests/important.rs\n")?;
+        fs::write(
+            root.join(".guardianignore"),
+            "*.tmp\ntests/**\n!tests/important.rs\n",
+        )?;
 
         // Create test files
         fs::write(root.join("src/lib.rs"), "")?;

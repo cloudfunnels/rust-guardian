@@ -5,6 +5,18 @@
     },
     {
       "pattern": "^https://localhost"
+    },
+    {
+      "pattern": "^https://crates\\.io/crates/rust-guardian"
+    },
+    {
+      "pattern": "^https://crates\\.io/me"
+    },
+    {
+      "pattern": "^https://crates\\.io/$"
+    },
+    {
+      "pattern": "^CONTRIBUTING\\.md$"
     }
   ],
   "replacementPatterns": [],

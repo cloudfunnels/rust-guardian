@@ -27,12 +27,18 @@ pub struct RustAnalyzer {
 impl RustAnalyzer {
     /// Create a new Rust analyzer with default settings
     pub fn new() -> Self {
-        Self { analyze_tests: false, check_quality_headers: true }
+        Self {
+            analyze_tests: false,
+            check_quality_headers: true,
+        }
     }
 
     /// Create a Rust analyzer that also analyzes test files
     pub fn with_tests() -> Self {
-        Self { analyze_tests: true, check_quality_headers: true }
+        Self {
+            analyze_tests: true,
+            check_quality_headers: true,
+        }
     }
 
     /// Find all unimplemented macros in the file
@@ -157,7 +163,11 @@ impl FileAnalyzer for RustAnalyzer {
     }
 
     fn handles_file(&self, file_path: &Path) -> bool {
-        file_path.extension().and_then(|ext| ext.to_str()).map(|ext| ext == "rs").unwrap_or(false)
+        file_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext == "rs")
+            .unwrap_or(false)
     }
 }
 
@@ -276,18 +286,24 @@ impl EmptyOkReturnVisitor {
 
     fn is_result_type(&self, ty: &syn::Type) -> bool {
         match ty {
-            syn::Type::Path(type_path) => {
-                type_path.path.segments.last().map(|seg| seg.ident == "Result").unwrap_or(false)
-            }
+            syn::Type::Path(type_path) => type_path
+                .path
+                .segments
+                .last()
+                .map(|seg| seg.ident == "Result")
+                .unwrap_or(false),
             _ => false,
         }
     }
 
     fn is_option_type(&self, ty: &syn::Type) -> bool {
         match ty {
-            syn::Type::Path(type_path) => {
-                type_path.path.segments.last().map(|seg| seg.ident == "Option").unwrap_or(false)
-            }
+            syn::Type::Path(type_path) => type_path
+                .path
+                .segments
+                .last()
+                .map(|seg| seg.ident == "Option")
+                .unwrap_or(false),
             _ => false,
         }
     }
@@ -309,7 +325,13 @@ impl EmptyOkReturnVisitor {
         if let syn::Expr::Call(call) = expr {
             // Check if it's Ok(...) with trivial arguments
             if let syn::Expr::Path(path) = &*call.func {
-                if path.path.segments.last().map(|seg| seg.ident == "Ok").unwrap_or(false) {
+                if path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident == "Ok")
+                    .unwrap_or(false)
+                {
                     // Ok() with no args is trivial
                     if call.args.is_empty() {
                         return true;
@@ -338,7 +360,13 @@ impl EmptyOkReturnVisitor {
         if let syn::Expr::Call(call) = expr {
             // Check if it's Some(...) with trivial arguments
             if let syn::Expr::Path(path) = &*call.func {
-                if path.path.segments.last().map(|seg| seg.ident == "Some").unwrap_or(false) {
+                if path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident == "Some")
+                    .unwrap_or(false)
+                {
                     // Some(()) with unit type is trivial
                     if call.args.len() == 1 {
                         if let syn::Expr::Tuple(tuple) = &call.args[0] {
@@ -408,8 +436,10 @@ fn another_function() {
 
         let violations = self.analyze(Path::new("test.rs"), content)?;
 
-        let unimplemented_violations: Vec<_> =
-            violations.iter().filter(|v| v.rule_id.contains("unimplemented")).collect();
+        let unimplemented_violations: Vec<_> = violations
+            .iter()
+            .filter(|v| v.rule_id.contains("unimplemented"))
+            .collect();
 
         if unimplemented_violations.is_empty() {
             return Err(GuardianError::analysis(
@@ -446,8 +476,10 @@ fn perform_operation() -> i32 {
 
         let violations = self.analyze(Path::new("test.rs"), content)?;
 
-        let empty_violations: Vec<_> =
-            violations.iter().filter(|v| v.rule_id == "empty_ok_return").collect();
+        let empty_violations: Vec<_> = violations
+            .iter()
+            .filter(|v| v.rule_id == "empty_ok_return")
+            .collect();
 
         if empty_violations.is_empty() {
             return Err(GuardianError::analysis(
@@ -457,8 +489,9 @@ fn perform_operation() -> i32 {
         }
 
         // Verify it caught the empty function
-        let has_empty_function =
-            empty_violations.iter().any(|v| v.message.contains("empty_function"));
+        let has_empty_function = empty_violations
+            .iter()
+            .any(|v| v.message.contains("empty_function"));
 
         if !has_empty_function {
             return Err(GuardianError::analysis(
@@ -502,8 +535,10 @@ mod tests {
 
         let violations = self.analyze(Path::new("test.rs"), content)?;
 
-        let unimplemented_violations: Vec<_> =
-            violations.iter().filter(|v| v.rule_id.contains("unimplemented")).collect();
+        let unimplemented_violations: Vec<_> = violations
+            .iter()
+            .filter(|v| v.rule_id.contains("unimplemented"))
+            .collect();
 
         // Should find exactly one violation (from regular_function)
         if unimplemented_violations.len() != 1 {
@@ -534,8 +569,10 @@ fn main() {
 "#;
 
         let violations = self.analyze(Path::new("src/main.rs"), content_without_header)?;
-        let missing_header_violations: Vec<_> =
-            violations.iter().filter(|v| v.rule_id == "quality_header_missing").collect();
+        let missing_header_violations: Vec<_> = violations
+            .iter()
+            .filter(|v| v.rule_id == "quality_header_missing")
+            .collect();
 
         if missing_header_violations.is_empty() {
             return Err(GuardianError::analysis(
@@ -559,8 +596,10 @@ fn main() {
 "#;
 
         let violations = self.analyze(Path::new("src/main.rs"), content_with_header)?;
-        let header_violations: Vec<_> =
-            violations.iter().filter(|v| v.rule_id == "quality_header_missing").collect();
+        let header_violations: Vec<_> = violations
+            .iter()
+            .filter(|v| v.rule_id == "quality_header_missing")
+            .collect();
 
         if !header_violations.is_empty() {
             return Err(GuardianError::analysis(
@@ -583,7 +622,10 @@ fn main() {
         // This is acceptable behavior - the file would fail to compile anyway
         if !violations.is_empty() {
             // Log this as interesting but don't fail - pattern matching might still work
-            tracing::debug!("Found {} violations in invalid syntax file", violations.len());
+            tracing::debug!(
+                "Found {} violations in invalid syntax file",
+                violations.len()
+            );
         }
 
         Ok(())

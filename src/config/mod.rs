@@ -294,7 +294,9 @@ impl GuardianConfig {
                     if rule.case_sensitive {
                         regex::Regex::new(&rule.pattern)
                     } else {
-                        regex::RegexBuilder::new(&rule.pattern).case_insensitive(true).build()
+                        regex::RegexBuilder::new(&rule.pattern)
+                            .case_insensitive(true)
+                            .build()
                     }
                     .map_err(|e| {
                         GuardianError::config(format!(
@@ -311,15 +313,16 @@ impl GuardianConfig {
 
     /// Get all enabled rules across all categories
     pub fn enabled_rules(&self) -> impl Iterator<Item = (&String, &PatternCategory, &PatternRule)> {
-        self.patterns.iter().filter(|(_, category)| category.enabled).flat_map(
-            |(name, category)| {
+        self.patterns
+            .iter()
+            .filter(|(_, category)| category.enabled)
+            .flat_map(|(name, category)| {
                 category
                     .rules
                     .iter()
                     .filter(|rule| rule.enabled)
                     .map(move |rule| (name, category, rule))
-            },
-        )
+            })
     }
 
     /// Get effective severity for a rule (rule override or category default)
@@ -412,7 +415,9 @@ pub struct ConfigBuilder {
 impl ConfigBuilder {
     /// Create a new builder with default configuration
     pub fn new() -> Self {
-        Self { config: GuardianConfig::default() }
+        Self {
+            config: GuardianConfig::default(),
+        }
     }
 
     /// Add a path pattern
@@ -483,7 +488,11 @@ impl GuardianConfig {
             .ignore_file(".guardian_ignore")
             .build()?;
 
-        if !evolved_config.paths.patterns.contains(&"guardian/evolution/**".to_string()) {
+        if !evolved_config
+            .paths
+            .patterns
+            .contains(&"guardian/evolution/**".to_string())
+        {
             return Err(GuardianError::config(
                 "Configuration evolution failed to integrate new patterns".to_string(),
             ));
