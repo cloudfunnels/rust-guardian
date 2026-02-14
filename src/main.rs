@@ -16,7 +16,7 @@ use std::process;
 /// Rust Guardian - Dynamic code quality enforcement
 #[derive(Parser)]
 #[command(name = "rust-guardian")]
-#[command(version = "0.1.0")]
+#[command(version = "0.1.1")]
 #[command(about = "Dynamic code quality enforcement preventing incomplete or placeholder code")]
 #[command(
     long_about = "Rust Guardian analyzes code for quality violations, placeholder implementations, and architectural compliance. Designed for autonomous agent workflows and CI/CD integration."

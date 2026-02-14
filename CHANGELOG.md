@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Minimal Versions CI Compatibility**: Updated minimum dependency versions to ensure compatibility with `cargo minimal-versions` testing on Rust nightly
+  - `hashbrown` ≥ 0.14.5 (fixes ahash stdsimd feature issue with modern nightly Rust)
+  - `lazy_static` ≥ 1.3.0 (fixes macro export issues with sharded-slab)
+  - `anyhow` ≥ 1.0.40 (fixes backtrace trait compatibility)
+  - `thiserror` ≥ 1.0.20 (ensures full #[from] attribute support)
+  - `chrono` ≥ 0.4.20 (ensures DateTime::default() implementation)
+  - `tracing-subscriber` ≥ 0.3.18 (uses compatible sharded-slab version)
+
 ## [0.1.0] - 2024-08-16
 
 🎉 **Initial release of Rust Guardian - Production-ready dynamic code quality enforcement**
